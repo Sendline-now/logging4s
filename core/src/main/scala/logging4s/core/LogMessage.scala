@@ -3,7 +3,6 @@ package logging4s.core
 import scala.quoted.*
 
 import logging4s.core.config.LoggableEncodingConfig
-import logging4s.core.syntax.all.plain
 
 object LogMessage:
 
@@ -43,12 +42,31 @@ object LogMessage:
   def render(message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using cfg: LoggableEncodingConfig): String =
     renderAll(message, cause, if cfg.includeValuesInMessage then values else Nil)
 
-  def renderAll(message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using LoggableEncodingConfig): String =
-    cause match
-      case None        => if values.isEmpty then message else s"$message: ${sanitize(values.plain)}"
-      case Some(error) =>
-        val base = s"$message: class=${error.getClass.getName}, message=${sanitize(String.valueOf(error.getMessage))}"
-        if values.isEmpty then base else s"$base, ${sanitize(values.plain)}"
+  def renderAll(message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using cfg: LoggableEncodingConfig): String =
+    if cause.isEmpty && values.isEmpty then message
+    else
+      val sb = new java.lang.StringBuilder(message.length + 64 + 48 * values.size).append(message).append(": ")
+
+      cause.foreach { error =>
+        sb.append("class=").append(error.getClass.getName).append(", message=").append(sanitize(String.valueOf(error.getMessage)))
+        if values.nonEmpty then sb.append(", "): Unit
+      }
+
+      if values.nonEmpty then
+        val start = sb.length
+        cfg.plainValuesStyle.appendValues(sb, values): Unit
+        sanitizeFrom(sb, start)
+
+      sb.toString
+
+  private def sanitizeFrom(sb: java.lang.StringBuilder, start: Int): Unit =
+    var i = start
+    while i < sb.length && !unsafe(sb.charAt(i)) do i += 1
+
+    if i < sb.length then
+      val tail = sb.substring(start)
+      sb.setLength(start)
+      sb.append(sanitize(tail)): Unit
 
   private def unsafe(c: Char): Boolean =
     (c < 0x20 && c != '\t') || c == 0x7f || c == 0x85 || c == 0x2028 || c == 0x2029

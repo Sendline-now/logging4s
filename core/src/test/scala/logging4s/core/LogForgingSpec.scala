@@ -25,6 +25,10 @@ class LogForgingSpec extends AnyWordSpec, Matchers:
       LogMessage.render("failed", Some(new NumberFormatException("For input string: \"1\nFAKE\"")), Nil) shouldEqual
         """failed: class=java.lang.NumberFormatException, message=For input string: "1\nFAKE""""
 
+    "escape the values after a cause, leaving the cause part as rendered" in:
+      LogMessage.render("failed", Some(new RuntimeException("boom")), Seq("a\nb".asLogValue("v"), 1.asLogValue("n"))) shouldEqual
+        """failed: class=java.lang.RuntimeException, message=boom, v -> (a\nb), n -> (1)"""
+
     "render a cause without a message as null" in:
       LogMessage.render("failed", Some(new RuntimeException()), Nil) shouldEqual "failed: class=java.lang.RuntimeException, message=null"
 

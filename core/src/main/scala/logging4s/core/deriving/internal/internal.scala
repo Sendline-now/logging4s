@@ -178,19 +178,24 @@ final class ProductLoggable[A](
     if specs.isEmpty
     then PlainString(typeName)
     else
-      val fields   = a.asInstanceOf[Product].productIterator
-      val rendered = List.newBuilder[(String, String)]
+      val fields = a.asInstanceOf[Product].productIterator
+      val style  = cfg.plainValuesStyle
+      val sb     = style.open(new java.lang.StringBuilder(32 * specs.size))
+      var first  = true
 
       specs.foreach { spec =>
         val v = fields.next()
         if visible(spec, v)
         then
-          spec.policy.mask match
-            case Some(mode) => rendered += spec.key -> mode(spec.loggable.plain(v).value)
-            case None       => rendered += spec.key -> spec.loggable.plain(v).value
+          val text = spec.policy.mask match
+            case Some(mode) => mode(spec.loggable.plain(v).value)
+            case None       => spec.loggable.plain(v).value
+
+          style.field(sb, spec.key, text, first)
+          first = false
       }
 
-      PlainString(cfg.plainValuesStyle.renderFields(rendered.result()))
+      PlainString(style.close(sb).toString)
 
 final class SumLoggable[A](
     typeName: String,

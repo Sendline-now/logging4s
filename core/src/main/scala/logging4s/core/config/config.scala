@@ -88,21 +88,53 @@ enum PlainValuesStyle:
   case Arrow, ArrowBare, Logfmt, KeyValueComma, Colon, Bracketed, Parens, CurlyMap
 
   def render(values: Seq[LoggableValue]): String =
-    join(values.iterator.map(v => (v.key.value, v.plain.value)))
+    appendValues(new java.lang.StringBuilder(32 * values.size), values).toString
 
   def renderFields(fields: Seq[(String, String)]): String =
-    join(fields.iterator)
+    val sb    = open(new java.lang.StringBuilder(32 * fields.size))
+    var first = true
 
-  private def join(fields: Iterator[(String, String)]): String =
+    fields.foreach { (key, value) =>
+      field(sb, key, value, first)
+      first = false
+    }
+
+    close(sb).toString
+
+  private[core] def appendValues(sb: java.lang.StringBuilder, values: Seq[LoggableValue]): java.lang.StringBuilder =
+    var first = true
+    open(sb): Unit
+
+    values.foreach { value =>
+      field(sb, value.key.value, value.plain.value, first)
+      first = false
+    }
+
+    close(sb)
+
+  private[core] def open(sb: java.lang.StringBuilder): java.lang.StringBuilder =
+    if this == CurlyMap then sb.append('{') else sb
+
+  private[core] def close(sb: java.lang.StringBuilder): java.lang.StringBuilder =
+    if this == CurlyMap then sb.append('}') else sb
+
+  private[core] def field(sb: java.lang.StringBuilder, key: String, value: String, first: Boolean): Unit =
+    if !first then sb.append(separator): Unit
+
     this match
-      case Arrow         => fields.map((key, value) => s"$key -> ($value)").mkString(", ")
-      case ArrowBare     => fields.map((key, value) => s"$key -> $value").mkString(", ")
-      case Logfmt        => fields.map((key, value) => s"$key=${logfmt(value)}").mkString(" ")
-      case KeyValueComma => fields.map((key, value) => s"$key=$value").mkString(", ")
-      case Colon         => fields.map((key, value) => s"$key: $value").mkString(", ")
-      case Bracketed     => fields.map((key, value) => s"[$key=$value]").mkString(" ")
-      case Parens        => fields.map((key, value) => s"$key($value)").mkString(" ")
-      case CurlyMap      => fields.map((key, value) => s"$key=$value").mkString("{", ", ", "}")
+      case Arrow         => sb.append(key).append(" -> (").append(value).append(')'): Unit
+      case ArrowBare     => sb.append(key).append(" -> ").append(value): Unit
+      case Logfmt        => sb.append(key).append('=').append(logfmt(value)): Unit
+      case KeyValueComma => sb.append(key).append('=').append(value): Unit
+      case Colon         => sb.append(key).append(": ").append(value): Unit
+      case Bracketed     => sb.append('[').append(key).append('=').append(value).append(']'): Unit
+      case Parens        => sb.append(key).append('(').append(value).append(')'): Unit
+      case CurlyMap      => sb.append(key).append('=').append(value): Unit
+
+  private def separator: String =
+    this match
+      case Logfmt | Bracketed | Parens => " "
+      case _                           => ", "
 
 final case class LoggableEncodingConfig(
     jsonTupleAsArray: Boolean = true,
