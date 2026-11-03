@@ -15,9 +15,24 @@ import logging4s.core.syntax.all.*
 
 import LogbackInstances.given
 
+import scala.jdk.CollectionConverters.given
+
 class LoggingLogbackSpec extends AnyWordSpec, Matchers:
 
   LogbackWarmup.touch()
+
+  private def loggerNamesUnder(name: String)(create: => Try[Logging[Try]]): List[String] =
+    val logbackLogger = LoggerFactory.getLogger(name).asInstanceOf[LogbackLogger]
+    val appender      = new ListAppender[ILoggingEvent]()
+
+    appender.setContext(logbackLogger.getLoggerContext)
+    appender.start()
+    logbackLogger.addAppender(appender)
+
+    try create.flatMap(_.info("hello")).isSuccess shouldEqual true
+    finally logbackLogger.detachAppender(appender)
+
+    appender.list.asScala.map(_.getLoggerName).toList
 
   "Logging backed by logback" must:
     "right create for default Delay implementations" in:
@@ -46,20 +61,16 @@ class LoggingLogbackSpec extends AnyWordSpec, Matchers:
       assert(info"application started".isSuccess)
 
     "name the logger after the type, without a trailing dollar for objects" in:
-      val name          = "logging4s.logback.NamedProbe"
-      val logbackLogger = LoggerFactory.getLogger(name).asInstanceOf[LogbackLogger]
-      val appender      = new ListAppender[ILoggingEvent]()
+      loggerNamesUnder("logging4s.logback.NamedProbe")(Logging.createTry[NamedProbe.type]) shouldEqual List("logging4s.logback.NamedProbe")
 
-      appender.setContext(logbackLogger.getLoggerContext)
-      appender.start()
-      logbackLogger.addAppender(appender)
+    "name a nested type's logger as getLogger(classOf[...]) does, which logback files under the outer type" in:
+      val nestedObject = loggerNamesUnder("logging4s.logback.NamedProbe")(Logging.createTry[NamedProbe.Inner.type])
+      val nestedClass  = loggerNamesUnder("logging4s.logback.NamedProbe")(Logging.createTry[NamedProbe.Nested])
 
-      try
-        val logging = Logging.createTry[NamedProbe.type].get
-        logging.info("hello").isSuccess shouldEqual true
-      finally logbackLogger.detachAppender(appender)
+      nestedObject shouldEqual List("logging4s.logback.NamedProbe$Inner")
+      nestedClass shouldEqual List(LoggerFactory.getLogger(classOf[NamedProbe.Nested]).getName)
 
-      appender.list.size shouldEqual 1
-      appender.list.get(0).getLoggerName shouldEqual name
+object NamedProbe:
+  object Inner
 
-object NamedProbe
+  final class Nested
