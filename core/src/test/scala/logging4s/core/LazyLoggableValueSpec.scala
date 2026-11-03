@@ -84,6 +84,21 @@ class LazyLoggableValueSpec extends AnyWordSpec, Matchers:
       Tracked.calls.json shouldEqual 0
       Tracked.calls.plain shouldEqual 0
 
+    "render a failing Loggable as a placeholder naming the error, in both forms, and count the value present" in:
+      val error = new IllegalStateException("bad \"codec\"")
+
+      val broken: Loggable[Int] = new:
+        override val key: ValueKey              = ValueKey("broken")
+        override def json(a: Int): JsonString   = throw error
+        override def plain(a: Int): PlainString = throw error
+        override def isAbsent(a: Int): Boolean  = throw error
+
+      val value = LoggableValue.deferred(ValueKey("broken"), 1, broken)
+
+      value.plain shouldEqual """[failed to render: java.lang.IllegalStateException: bad "codec"]"""
+      value.json shouldEqual """"[failed to render: java.lang.IllegalStateException: bad \"codec\"]""""
+      value.absent shouldEqual false
+
   "A hand-built LoggableValue" must:
     "keep working with pre-rendered strings" in:
       val value = LoggableValue(ValueKey("k"), PlainString("p"), JsonString("1"))

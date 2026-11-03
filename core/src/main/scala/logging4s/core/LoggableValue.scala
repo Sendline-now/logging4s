@@ -1,5 +1,7 @@
 package logging4s.core
 
+import scala.util.control.NonFatal
+
 import logging4s.core.config.{KeyNameStyle, LoggableEncodingConfig}
 
 into sealed trait LoggableValue:
@@ -22,11 +24,15 @@ object LoggableValue:
     override def withKey(updatedKey: ValueKey): LoggableValue = copy(key = updatedKey)
 
   private final class Deferred[A](val key: ValueKey, value: A, loggable: Loggable[A]) extends LoggableValue:
-    override lazy val plain: PlainString = loggable.plain(value)
-    override lazy val json: JsonString   = loggable.json(value)
-    override lazy val absent: Boolean    = loggable.isAbsent(value)
+    override lazy val plain: PlainString = guarded(loggable.plain(value), PlainString(_))
+    override lazy val json: JsonString   = guarded(loggable.json(value), JsonString.quoted)
+    override lazy val absent: Boolean    = guarded(loggable.isAbsent(value), _ => false)
 
     override def withKey(updatedKey: ValueKey): LoggableValue = Deferred(updatedKey, value, loggable)
+
+  private def guarded[B](render: => B, failed: String => B): B =
+    try render
+    catch case NonFatal(error) => failed(s"[failed to render: $error]")
 
   def normalizeKeys(values: Seq[LoggableValue])(using cfg: LoggableEncodingConfig): Seq[LoggableValue] =
     def formatted(value: LoggableValue): String = cfg.keyNameStyle.format(value.key.value)

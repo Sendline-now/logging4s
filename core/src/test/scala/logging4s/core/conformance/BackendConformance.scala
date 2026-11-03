@@ -6,7 +6,7 @@ import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
 import logging4s.core.syntax.all.*
-import logging4s.core.{Delay, Identity, Level, Logging, LoggingContext}
+import logging4s.core.{Delay, Identity, Level, Loggable, LoggableValue, Logging, LoggingContext, ValueKey}
 
 final case class CapturedRecord(message: String, fields: Seq[(String, String)]):
   def keys: Seq[String]                  = fields.map(_._1)
@@ -112,6 +112,19 @@ trait BackendConformance extends AnyWordSpec, Matchers:
       }
 
       record.message shouldEqual "payment failed: class=java.lang.RuntimeException, message=boom, n -> (1)"
+
+    "keep the record and the effect when a value fails to render, showing the failure in its place" in:
+      val broken = Loggable.make[Int]("broken")(_ => throw new IllegalStateException("bad codec"), _ => throw new IllegalStateException("bad codec"))
+      var result = Try(())
+
+      val record = capture(s"$backendName-conformance-broken") { logging =>
+        result = logging.info("event", LoggableValue.deferred(ValueKey("broken"), 1, broken), 2.asLogValue("n"))
+      }
+
+      result.isSuccess shouldEqual true
+      record("broken") shouldEqual Some("\"[failed to render: java.lang.IllegalStateException: bad codec]\"")
+      record("n") shouldEqual Some("2")
+      record.message shouldEqual "event: broken -> ([failed to render: java.lang.IllegalStateException: bad codec]), n -> (2)"
 
     "build no effect for a record below the logger's level" in:
       var delays = 0
