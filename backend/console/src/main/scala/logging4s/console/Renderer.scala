@@ -11,6 +11,8 @@ private[console] object Renderer:
 
   private val Esc: Char = 27.toChar
 
+  private val LevelNames: IArray[String] = IArray.from(Level.values.map(_.toString.toUpperCase(Locale.ROOT)))
+
   def render(
       console: ConsoleConfig,
       level: Level,
@@ -31,16 +33,18 @@ private[console] object Renderer:
       cause: Option[Throwable],
       record: LogRecord,
   )(using LoggableEncodingConfig): String =
-    val envelope = Seq(
-      "@timestamp" -> Instant.ofEpochMilli(System.currentTimeMillis).toString,
-      "level"      -> level.toString.toUpperCase(Locale.ROOT),
-      "logger"     -> logger,
-      "thread"     -> Thread.currentThread.getName,
-      "message"    -> LogMessage.render(message, cause, record.values),
-    )
-    val trace    = cause.map(t => "stack_trace" -> stackTrace(t, console.maxStackTraceLines)).toSeq
+    val text    = LogMessage.render(message, cause, record.values)
+    val builder = new StructuredJson.Builder(StructuredJson.capacity(text, record.structured))
 
-    StructuredJson.line(envelope ++ trace, record.structured)
+    builder.field("@timestamp", Instant.ofEpochMilli(System.currentTimeMillis).toString)
+    builder.field("level", LevelNames(level.ordinal))
+    builder.field("logger", logger)
+    builder.field("thread", Thread.currentThread.getName)
+    builder.field("message", text)
+    cause.foreach(t => builder.field("stack_trace", stackTrace(t, console.maxStackTraceLines)))
+    builder.values(record.structured)
+
+    builder.result
 
   private def plain(
       console: ConsoleConfig,
@@ -52,7 +56,7 @@ private[console] object Renderer:
   )(using LoggableEncodingConfig): String =
     val timestamp = Instant.ofEpochMilli(System.currentTimeMillis).toString
     val rendered  = LogMessage.renderAll(message, cause, record.structured)
-    val base      = s"$timestamp ${level.toString.toUpperCase(Locale.ROOT)} $logger - $rendered"
+    val base      = s"$timestamp ${LevelNames(level.ordinal)} $logger - $rendered"
     val withTrace = cause.fold(base)(t => s"$base${System.lineSeparator}${stackTrace(t, console.maxStackTraceLines)}")
 
     colorize(console, level, withTrace)

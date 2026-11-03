@@ -17,8 +17,9 @@ class Logging4sEncoder extends EncoderBase[ILoggingEvent]:
   override def footerBytes(): Array[Byte] = Array.emptyByteArray
 
   override def encode(event: ILoggingEvent): Array[Byte] =
-    val builder   = new StructuredJson.Builder
     val values    = loggableValues(event.getMarkerList)
+    val message   = Option(event.getFormattedMessage).getOrElse("")
+    val builder   = new StructuredJson.Builder(StructuredJson.capacity(message, values))
     val mdc       = event.getMDCPropertyMap
     val keyValues = event.getKeyValuePairs
     val throwable = event.getThrowableProxy
@@ -27,7 +28,7 @@ class Logging4sEncoder extends EncoderBase[ILoggingEvent]:
     builder.field("level", event.getLevel.toString)
     builder.field("logger", event.getLoggerName)
     builder.field("thread", event.getThreadName)
-    builder.field("message", Option(event.getFormattedMessage).getOrElse(""))
+    builder.field("message", message)
 
     if !mdc.isEmpty || (keyValues != null && !keyValues.isEmpty) then
       val own   = values.iterator.map(_.key.value).toSet
@@ -51,7 +52,7 @@ class Logging4sEncoder extends EncoderBase[ILoggingEvent]:
 
     builder.values(values)
 
-    (builder.result + "\n").getBytes(StandardCharsets.UTF_8)
+    builder.resultWithNewline.getBytes(StandardCharsets.UTF_8)
 
   private def loggableValues(markers: java.util.List[Marker]): Seq[LoggableValue] =
     if markers == null || markers.isEmpty

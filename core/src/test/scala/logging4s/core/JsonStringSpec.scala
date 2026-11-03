@@ -32,3 +32,17 @@ class JsonStringSpec extends AnyWordSpec, Matchers:
 
       builder.result shouldEqual """{"x":"y"}"""
       builder.result shouldEqual """{"x":"y"}"""
+
+    "end a line with a newline without changing the result" in:
+      val builder = StructuredJson.Builder()
+      builder.field("x", "y")
+
+      builder.resultWithNewline shouldEqual "{\"x\":\"y\"}\n"
+      builder.result shouldEqual """{"x":"y"}"""
+
+    "escape field names, string values and value keys in place" in:
+      val builder = StructuredJson.Builder()
+      builder.field("a\"b", "line1\nline2")
+      builder.value(LoggableValue(ValueKey("k\\"), PlainString("1"), JsonString("1")))
+
+      builder.result shouldEqual """{"a\"b":"line1\nline2","k\\":1}"""

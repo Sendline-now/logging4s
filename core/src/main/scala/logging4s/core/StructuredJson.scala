@@ -9,10 +9,17 @@ object StructuredJson:
     builder.result
   end line
 
-  final class Builder:
-    private val sb     = new java.lang.StringBuilder(256).append('{')
+  def capacity(text: String, values: Iterable[LoggableValue]): Int =
+    var size = 192 + text.length
+    values.foreach(value => size += value.key.value.length + value.json.value.length + 4)
+    size
+
+  final class Builder(capacity: Int):
+    private val sb     = new java.lang.StringBuilder(capacity).append('{')
     private var first  = true
     private var closed = false
+
+    def this() = this(256)
 
     private def separate(): Unit =
       if !first then sb.append(','): Unit
@@ -20,22 +27,31 @@ object StructuredJson:
 
     def field(key: String, value: String): Unit =
       separate()
-      sb.append(JsonString.quoted(key).value).append(':').append(JsonString.quoted(value).value): Unit
+      JsonString.appendQuoted(JsonString.appendQuoted(sb, key).append(':'), value): Unit
 
     def fields(entries: Iterable[(String, String)]): Unit =
       entries.foreach((key, value) => field(key, value))
 
     def value(value: LoggableValue): Unit =
       separate()
-      sb.append(JsonString.quoted(value.key.value).value).append(':').append(value.json.value): Unit
+      JsonString.appendQuoted(sb, value.key.value).append(':').append(value.json.value): Unit
 
     def values(values: Iterable[LoggableValue]): Unit =
       values.foreach(value)
 
     def result: String =
+      close()
+      sb.toString
+
+    def resultWithNewline: String =
+      close()
+      val length = sb.length
+      val text   = sb.append('\n').toString
+      sb.setLength(length)
+      text
+
+    private def close(): Unit =
       if !closed
       then
         sb.append('}'): Unit
         closed = true
-
-      sb.toString

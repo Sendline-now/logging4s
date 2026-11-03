@@ -37,6 +37,9 @@ object JsonString:
   private def needsEscape(c: Char): Boolean =
     c == '"' || c == '\\' || c < 0x20
 
+  private[core] def appendQuoted(sb: java.lang.StringBuilder, raw: String): java.lang.StringBuilder =
+    sb.append('"').append(escape(raw)).append('"')
+
   private def escape(raw: String): String =
     val n = raw.length
     var i = 0
