@@ -103,3 +103,25 @@ class LoggingConsoleSpec extends AnyWordSpec, Matchers:
       }
 
       loud should include("kept")
+
+    "describe the cause in the message and write its stack trace as a field in JSON" in:
+      val out = capture(jsonAtInfo, name = "ConsoleSpec-json-cause") { logging =>
+        logging.error("payment failed", new RuntimeException("boom"))
+      }
+
+      out should include(""""message":"payment failed: class=java.lang.RuntimeException, message=boom"""")
+      out should include(""""stack_trace":"java.lang.RuntimeException: boom""")
+
+    "describe the cause on the plain line and print its stack trace below, cut to the configured length" in:
+      val config = ConsoleConfig(Threshold.At(Level.Info), Format.Plain, ColorMode.Off, Stream.Stdout, 2)
+
+      val out = capture(config, name = "ConsoleSpec-plain-cause") { logging =>
+        logging.error("payment failed", new RuntimeException("boom"))
+      }
+
+      val lines = out.linesIterator.dropWhile(!_.contains("ConsoleSpec-plain-cause")).take(4).toList
+
+      lines.head should include("ERROR ConsoleSpec-plain-cause - payment failed: class=java.lang.RuntimeException, message=boom")
+      lines(1) shouldEqual "java.lang.RuntimeException: boom"
+      lines(2) should startWith("\tat ")
+      lines(3) should fullyMatch regex """\.\.\. \d+ more"""

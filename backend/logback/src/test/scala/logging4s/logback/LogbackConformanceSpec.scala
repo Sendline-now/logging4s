@@ -28,6 +28,7 @@ class LogbackConformanceSpec extends BackendConformance:
     LoggingLogbackJsonSpec.appenderLock.synchronized {
       val logbackLogger = LoggerFactory.getLogger(loggerName).asInstanceOf[LogbackLogger]
       logbackLogger.setLevel(LogbackLevel.TRACE)
+      logbackLogger.setAdditive(false)
 
       val context = logbackLogger.getLoggerContext
       val out     = new ByteArrayOutputStream()

@@ -88,6 +88,13 @@ trait BackendConformance extends AnyWordSpec, Matchers:
 
       record.message should startWith("user created")
 
+    "describe the cause in the message text the same way as every other backend" in:
+      val record = capture(s"$backendName-conformance-cause") { logging =>
+        logging.error("payment failed", new RuntimeException("boom"), 1.asLogValue("n"))
+      }
+
+      record.message shouldEqual "payment failed: class=java.lang.RuntimeException, message=boom, n -> (1)"
+
     "build no effect for a record below the logger's level" in:
       var delays = 0
 

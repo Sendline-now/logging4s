@@ -36,7 +36,7 @@ private[console] object Renderer:
       "level"      -> level.toString.toUpperCase(Locale.ROOT),
       "logger"     -> logger,
       "thread"     -> Thread.currentThread.getName,
-      "message"    -> LogMessage.render(message, None, record.values),
+      "message"    -> LogMessage.render(message, cause, record.values),
     )
     val trace    = cause.map(t => "stack_trace" -> stackTrace(t, console.maxStackTraceLines)).toSeq
 
@@ -51,7 +51,7 @@ private[console] object Renderer:
       record: LogRecord,
   )(using LoggableEncodingConfig): String =
     val timestamp = Instant.ofEpochMilli(System.currentTimeMillis).toString
-    val rendered  = LogMessage.renderAll(message, None, record.structured)
+    val rendered  = LogMessage.renderAll(message, cause, record.structured)
     val base      = s"$timestamp ${level.toString.toUpperCase(Locale.ROOT)} $logger - $rendered"
     val withTrace = cause.fold(base)(t => s"$base${System.lineSeparator}${stackTrace(t, console.maxStackTraceLines)}")
 
