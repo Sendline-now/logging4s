@@ -1,20 +1,23 @@
 package logging4s.logback
 
 import java.time.Instant
-import java.io.ByteArrayOutputStream
 import java.time.temporal.ChronoUnit
+import java.nio.charset.StandardCharsets
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.util.Try
 
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
-import org.slf4j.{LoggerFactory, MDC}
-import ch.qos.logback.classic.spi.ILoggingEvent
+import org.slf4j.{Logger, LoggerFactory, MDC}
 import ch.qos.logback.core.OutputStreamAppender
+import ch.qos.logback.classic.util.LogbackMDCAdapter
+import ch.qos.logback.classic.joran.JoranConfigurator
 import net.logstash.logback.marker.{LogstashMarker, Markers}
-import ch.qos.logback.classic.{Level, Logger as LogbackLogger}
+import ch.qos.logback.classic.spi.{ILoggingEvent, LoggingEvent}
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import ch.qos.logback.classic.{Level, LoggerContext, Logger as LogbackLogger}
 
 import logging4s.core.conformance.JsonRecord
 import logging4s.core.{JsonString, Logging, LoggableValue, PlainString, ValueKey}
@@ -22,6 +25,7 @@ import logging4s.core.{JsonString, Logging, LoggableValue, PlainString, ValueKey
 import LogbackInstances.given
 
 class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
+  import Logging4sEncoderSpec.*
 
   LogbackWarmup.touch()
 
@@ -30,10 +34,10 @@ class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
   private def capture(loggerName: String)(run: Logging[Try] => Unit): JsonNode =
     mapper.readTree(captureLine(loggerName)(run))
 
-  private def captureLine(loggerName: String)(run: Logging[Try] => Unit): String =
-    captureDirect(loggerName)(_ => run(Logging.createTry(loggerName).get))
+  private def captureLine(loggerName: String, configure: Logging4sEncoder => Unit = _ => ())(run: Logging[Try] => Unit): String =
+    captureDirect(loggerName, configure)(_ => run(Logging.createTry(loggerName).get))
 
-  private def captureDirect(loggerName: String)(run: LogbackLogger => Unit): String =
+  private def captureDirect(loggerName: String, configure: Logging4sEncoder => Unit = _ => ())(run: LogbackLogger => Unit): String =
     LoggingLogbackJsonSpec.appenderLock.synchronized {
       val logbackLogger = LoggerFactory.getLogger(loggerName).asInstanceOf[LogbackLogger]
       logbackLogger.setLevel(Level.TRACE)
@@ -43,6 +47,7 @@ class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
 
       val encoder = new Logging4sEncoder()
       encoder.setContext(context)
+      configure(encoder)
       encoder.start()
 
       val appender = new OutputStreamAppender[ILoggingEvent]()
@@ -184,3 +189,82 @@ class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
 
       json.get("user").asText() shouldEqual "bob"
       json.has("foreign") shouldEqual false
+
+    "rename every envelope field when configured to" in:
+      val json = mapper.readTree(captureDirect("Logging4sEncoderSpec-renamed", renamed)(_.error("failed", new RuntimeException("boom"))))
+
+      Renamed.values.foreach(name => json.has(name) shouldEqual true)
+      Renamed.keys.foreach(name => json.has(name) shouldEqual false)
+
+    "suffix a logging4s value that takes a renamed envelope field's name, as it does for the default names" in:
+      val msg = LoggableValue(ValueKey("msg"), PlainString("mine"), JsonString("\"mine\""))
+
+      val record = JsonRecord.parse(captureLine("Logging4sEncoderSpec-renamed-collision", _.setMessageField("msg")) { logging =>
+        logging.info("handled", msg)
+      })
+
+      record.count("msg") shouldEqual 1
+      record("msg") shouldEqual Some("\"handled: msg -> (mine)\"")
+      record("msg_2") shouldEqual Some("\"mine\"")
+
+    "leave out the thread, MDC entries and key-value pairs when configured to" in:
+      def excluding(encoder: Logging4sEncoder): Unit =
+        encoder.setIncludeThread(false)
+        encoder.setIncludeMdc(false)
+        encoder.setIncludeKeyValuePairs(false)
+
+      val json = mapper.readTree(captureDirect("Logging4sEncoderSpec-excluding", excluding) { logger =>
+        withMdc("tenant" -> "acme")(logger.atInfo().addKeyValue("request_id", "abc").log("event"))
+      })
+
+      Seq("thread", "tenant", "request_id").foreach(name => json.has(name) shouldEqual false)
+      json.get("message").asText() shouldEqual "event"
+
+    "take its settings from a logback XML configuration" in:
+      val context      = new LoggerContext()
+      val configurator = new JoranConfigurator()
+      context.setMDCAdapter(new LogbackMDCAdapter())
+      configurator.setContext(context)
+      configurator.doConfigure(new ByteArrayInputStream(XmlConfiguration.getBytes(StandardCharsets.UTF_8)))
+
+      try
+        val appender = context.getLogger(Logger.ROOT_LOGGER_NAME).getAppender("OUT").asInstanceOf[OutputStreamAppender[ILoggingEvent]]
+        val event    = new LoggingEvent(classOf[LogbackLogger].getName, context.getLogger("xml"), Level.INFO, "event", null, null)
+        val json     = mapper.readTree(new String(appender.getEncoder.encode(event), StandardCharsets.UTF_8))
+
+        json.get("msg").asText() shouldEqual "event"
+        json.has("message") shouldEqual false
+        json.has("thread") shouldEqual false
+      finally context.stop()
+
+object Logging4sEncoderSpec:
+
+  val Renamed: Map[String, String] = Map(
+    "@timestamp"  -> "time",
+    "level"       -> "severity",
+    "logger"      -> "logger_name",
+    "thread"      -> "thread_name",
+    "message"     -> "msg",
+    "stack_trace" -> "error",
+  )
+
+  def renamed(encoder: Logging4sEncoder): Unit =
+    encoder.setTimestampField(Renamed("@timestamp"))
+    encoder.setLevelField(Renamed("level"))
+    encoder.setLoggerField(Renamed("logger"))
+    encoder.setThreadField(Renamed("thread"))
+    encoder.setMessageField(Renamed("message"))
+    encoder.setStackTraceField(Renamed("stack_trace"))
+
+  val XmlConfiguration: String =
+    """<configuration>
+      |  <appender name="OUT" class="ch.qos.logback.core.ConsoleAppender">
+      |    <encoder class="logging4s.logback.Logging4sEncoder">
+      |      <messageField>msg</messageField>
+      |      <includeThread>false</includeThread>
+      |    </encoder>
+      |  </appender>
+      |  <root level="INFO">
+      |    <appender-ref ref="OUT"/>
+      |  </root>
+      |</configuration>""".stripMargin
