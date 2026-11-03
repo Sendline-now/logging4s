@@ -13,7 +13,7 @@ private[slf4j] class LoggingSlf4jImpl[F[*]: Delay](
     cfg: LoggableEncodingConfig
 ) extends Logging[F]:
 
-  private val ctxValues = LoggableValue.normalizeKeys(context.values)
+  private val ctxValues = LogRecord.context(Nil, context).values
 
   override def withContext(moreContext: LoggingContext): Logging[F] =
     LoggingSlf4jImpl(logger, LogRecord.context(ctxValues, moreContext))
@@ -23,7 +23,7 @@ private[slf4j] class LoggingSlf4jImpl[F[*]: Delay](
     else
       Delay[F].delay {
         if enabled(level) then
-          val record = LogRecord.prepare(ctxValues, values, position)
+          val record = LogRecord.prepare(ctxValues, values, position, LogRecord.ReservedKeys)
 
           val withCause     = cause.fold(builder(level))(builder(level).setCause)
           val withKeyValues = record.structured.foldLeft(withCause) { (b, v) => b.addKeyValue(v.key.value, v.json.value) }

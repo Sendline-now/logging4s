@@ -10,7 +10,7 @@ private[console] class LoggingConsoleImpl[F[*]: Delay](name: String, context: Lo
     encoding: LoggableEncodingConfig,
 ) extends Logging[F]:
 
-  private val ctxValues = LoggableValue.normalizeKeys(context.values)
+  private val ctxValues = LogRecord.context(Nil, context).values
 
   override def withContext(moreContext: LoggingContext): Logging[F] =
     LoggingConsoleImpl(name, LogRecord.context(ctxValues, moreContext))

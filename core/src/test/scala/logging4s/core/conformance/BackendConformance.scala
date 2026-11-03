@@ -17,7 +17,7 @@ trait BackendConformance extends AnyWordSpec, Matchers:
 
   def backendName: String
 
-  def capture(loggerName: String)(run: Logging[Try] => Unit): CapturedRecord
+  def capture(loggerName: String, context: LoggingContext = LoggingContext.empty)(run: Logging[Try] => Unit): CapturedRecord
 
   def atInfo(loggerName: String)(using Delay[Identity]): Logging[Identity]
 
@@ -61,6 +61,13 @@ trait BackendConformance extends AnyWordSpec, Matchers:
           .withContext(LoggingContext(2.asLogValue("user_id")))
           .info("event")
       }
+
+      record.count("user_id") shouldEqual 1
+      record("user_id") shouldEqual Some("2")
+
+    "treat keys of the context given at creation that normalize to the same name as one key, like withContext does" in:
+      val context = LoggingContext(1.asLogValue("userId"), 2.asLogValue("user_id"))
+      val record  = capture(s"$backendName-conformance-created-context", context)(_.info("event"))
 
       record.count("user_id") shouldEqual 1
       record("user_id") shouldEqual Some("2")

@@ -4,11 +4,15 @@ import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
 import org.slf4j.LoggerFactory
+import ch.qos.logback.core.read.ListAppender
+import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.{Level as LogbackLevel, Logger as LogbackLogger}
 
-import logging4s.core.{Delay, Identity, JsonString, Level, Logging, LoggableValue, PlainString, ValueKey}
+import logging4s.core.{Delay, Identity, JsonString, Level, Logging, LoggableValue, LoggingContext, PlainString, ValueKey}
 
 import Slf4jInstances.given
+
+import scala.jdk.CollectionConverters.given
 
 class LoggingSlf4jSpec extends AnyWordSpec, Matchers:
 
@@ -75,3 +79,25 @@ class LoggingSlf4jSpec extends AnyWordSpec, Matchers:
       logging.emit(Level.Debug, "event", None, Nil)
 
       delays shouldEqual 0
+
+    "suffix a value named after an envelope field, and collapse context keys that normalize to one name" in:
+      val name     = "LoggingSlf4jSpec-keys"
+      val logger   = LoggerFactory.getLogger(name).asInstanceOf[LogbackLogger]
+      val appender = new ListAppender[ILoggingEvent]()
+
+      appender.start()
+      logger.setLevel(LogbackLevel.INFO)
+      logger.setAdditive(false)
+      logger.addAppender(appender)
+
+      val context = LoggingContext(
+        LoggableValue(ValueKey("userId"), PlainString("1"), JsonString("1")),
+        LoggableValue(ValueKey("user_id"), PlainString("2"), JsonString("2")),
+      )
+
+      Logging.createTry(name, context).get.info("x", LoggableValue(ValueKey("level"), PlainString("forged"), JsonString("\"forged\""))).get
+
+      val pairs = appender.list.get(0).getKeyValuePairs.asScala.map(pair => pair.key -> String.valueOf(pair.value)).toList
+
+      pairs.map(_._1) shouldEqual List("user_id", "level_2", "source")
+      pairs.head._2 shouldEqual "2"

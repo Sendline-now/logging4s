@@ -8,7 +8,7 @@ import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.{Level as Log4jLevel, LogManager}
 import org.apache.logging.log4j.core.config.{Configuration, LoggerConfig, Property}
 
-import logging4s.core.{Delay, Identity, Logging}
+import logging4s.core.{Delay, Identity, Logging, LoggingContext}
 import logging4s.core.conformance.{BackendConformance, CapturedRecord, JsonRecord}
 
 import Log4j2Instances.given
@@ -34,10 +34,10 @@ class Log4j2ConformanceSpec extends BackendConformance:
     }
     Logging.create[Identity](loggerName)
 
-  override def capture(loggerName: String)(run: Logging[Try] => Unit): CapturedRecord =
+  override def capture(loggerName: String, context: LoggingContext)(run: Logging[Try] => Unit): CapturedRecord =
     Log4j2ConformanceSpec.configurationLock.synchronized {
-      val context: LoggerContext       = LogManager.getContext(false).asInstanceOf[LoggerContext]
-      val configuration: Configuration = context.getConfiguration
+      val loggerContext: LoggerContext = LogManager.getContext(false).asInstanceOf[LoggerContext]
+      val configuration: Configuration = loggerContext.getConfiguration
 
       val appender = new ConformanceAppender
       appender.start()
@@ -47,13 +47,13 @@ class Log4j2ConformanceSpec extends BackendConformance:
 
       loggerConfig.addAppender(appender, null, null)
       configuration.addLogger(loggerName, loggerConfig)
-      context.updateLoggers()
+      loggerContext.updateLoggers()
 
-      try run(Logging.createTry(loggerName).get)
+      try run(Logging.createTry(loggerName, context).get)
       finally
         configuration.removeLogger(loggerName)
         appender.stop()
-        context.updateLoggers()
+        loggerContext.updateLoggers()
 
       val message = appender.message.asInstanceOf[LoggableMapMessage]
 

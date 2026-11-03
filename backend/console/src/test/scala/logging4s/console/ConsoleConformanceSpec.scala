@@ -4,7 +4,7 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 
 import scala.util.Try
 
-import logging4s.core.{Delay, Identity, Level, Logging}
+import logging4s.core.{Delay, Identity, Level, Logging, LoggingContext}
 import logging4s.core.config.LoggableEncodingConfig
 import logging4s.core.conformance.{BackendConformance, CapturedRecord, JsonRecord}
 
@@ -21,13 +21,13 @@ class ConsoleConformanceSpec extends BackendConformance:
     given ConsoleConfig = config.copy(levels = Map(loggerName -> Threshold.At(Level.Info)))
     Logging.create[Identity](loggerName)
 
-  override def capture(loggerName: String)(run: Logging[Try] => Unit): CapturedRecord =
+  override def capture(loggerName: String, context: LoggingContext)(run: Logging[Try] => Unit): CapturedRecord =
     ConsoleCaptureLock.synchronized {
       val out      = new ByteArrayOutputStream()
       val original = System.out
 
       System.setOut(new PrintStream(out, true, "UTF-8"))
-      try run(Logging.createTry(loggerName).get)
+      try run(Logging.createTry(loggerName, context).get)
       finally System.setOut(original)
 
       val line = out

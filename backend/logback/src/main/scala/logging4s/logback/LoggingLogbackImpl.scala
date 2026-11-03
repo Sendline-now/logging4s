@@ -12,7 +12,7 @@ private[logback] class LoggingLogbackImpl[F[*]: Delay](
     cfg: LoggableEncodingConfig
 ) extends Logging[F]:
 
-  private val ctxValues = LoggableValue.normalizeKeys(context.values)
+  private val ctxValues = LogRecord.context(Nil, context).values
 
   override def withContext(moreContext: LoggingContext): Logging[F] =
     LoggingLogbackImpl(logger, LogRecord.context(ctxValues, moreContext))
