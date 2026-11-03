@@ -140,12 +140,12 @@ final class ProductLoggable[A](
     else if specs.isEmpty then JsonString("{}")
     else
       val fields = a.asInstanceOf[Product].productIterator
-      val sb     = new StringBuilder("{")
+      val sb     = new java.lang.StringBuilder(64 + 16 * specs.size).append('{')
       var first  = true
 
       def entry(quotedKey: String, rawValue: String): Unit =
         if !first
-        then sb.append(',')
+        then sb.append(','): Unit
 
         sb.append(quotedKey).append(':').append(rawValue): Unit
         first = false
@@ -163,12 +163,11 @@ final class ProductLoggable[A](
               then entry(spec.quotedKey, raw)
               else if raw.length >= 2 && raw.charAt(0) == '{' && raw.charAt(raw.length - 1) == '}'
               then
-                val inner = raw.substring(1, raw.length - 1)
-                if inner.nonEmpty
+                if raw.length > 2
                 then
                   if !first
-                  then sb.append(',')
-                  sb.append(inner)
+                  then sb.append(','): Unit
+                  sb.append(raw, 1, raw.length - 1)
                   first = false
               else entry(spec.quotedKey, raw)
       }

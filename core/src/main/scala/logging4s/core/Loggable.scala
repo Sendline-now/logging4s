@@ -286,6 +286,8 @@ object Loggable extends LoggableMidPriority:
       override def json(a: Map[K, V]): JsonString =
         if !cfg.mapAsObject
         then JsonString.array(a.toSeq.map(entry.json)*)
+        else if a.sizeIs <= 1
+        then JsonString(a.iterator.map((k, v) => s"${objectKey(k)}:${VL.json(v).value}").mkString("{", ",", "}"))
         else
           val taken = scala.collection.mutable.HashSet.empty[String]
           JsonString(a.iterator.map((k, v) => s"${uniqueKey(objectKey(k), taken)}:${VL.json(v).value}").mkString("{", ",", "}"))
