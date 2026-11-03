@@ -1,7 +1,6 @@
 package logging4s.core
 
 import scala.collection.immutable.Queue
-import scala.language.implicitConversions
 
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers

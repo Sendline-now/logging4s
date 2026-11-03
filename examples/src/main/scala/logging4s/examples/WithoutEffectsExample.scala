@@ -6,7 +6,6 @@ import scala.util.Try
 
 import logging4s.core.{Logging, ThrowableEither}
 
-import scala.language.implicitConversions
 import logging4s.logback.LogbackInstances.given
 
 object WithoutEffectsExample:

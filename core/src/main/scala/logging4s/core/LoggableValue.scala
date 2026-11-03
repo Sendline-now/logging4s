@@ -2,7 +2,7 @@ package logging4s.core
 
 import logging4s.core.config.{KeyNameStyle, LoggableEncodingConfig}
 
-sealed trait LoggableValue:
+into sealed trait LoggableValue:
   def key: ValueKey
   def plain: PlainString
   def json: JsonString

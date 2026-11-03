@@ -5,8 +5,6 @@ import net.logstash.logback.marker.LogstashMarker
 
 import logging4s.core.LoggableValue
 
-import scala.language.implicitConversions
-
 private[logback] object MarkerHelper:
 
   def fromLoggable(value: LoggableValue): LogstashMarker =

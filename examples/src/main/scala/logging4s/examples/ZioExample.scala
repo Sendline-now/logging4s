@@ -6,7 +6,6 @@ import zio.{Task, ZIO, ZIOAppDefault}
 
 import logging4s.core.Logging
 
-import scala.language.implicitConversions
 import logging4s.zio.ZioInstances.given
 import logging4s.logback.LogbackInstances.given
 
