@@ -304,8 +304,9 @@ lazy val examples = project
   .settings(commonSettings)
   .settings(noPublishSettings)
   .settings(
-    name := "logging4s-examples",
+    name       := "logging4s-examples",
     libraryDependencies += Dependencies.Cats.catsEffect3,
+    run / fork := true,
   )
   .dependsOn(
     zio,

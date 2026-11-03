@@ -51,5 +51,25 @@ jobs:
       - name: Compile examples and benchmarks
         run: sbt "examples / Compile / compile; benchmarks / Compile / compile"
 
+      - name: Run examples
+        shell: bash
+        run: |
+          mains="CatsEffect3Example ConsoleExample ContextualLoggingExample LogWithContextExample NamedTupleExample WithoutEffectsExample ZioExample"
+          commands=$(printf 'examples/runMain logging4s.examples.%s; ' $mains)
+          sbt -Dsbt.color=false "${commands%; }" | tee examples.log
+
+          expect() {
+            awk -v main="logging4s.examples.$1" '/^\[info\] running \(fork\) / { on = ($NF == main) } on' examples.log | grep -qF -- "$2" \
+              || { echo "::error::$1 did not log: $2"; exit 1; }
+          }
+
+          expect CatsEffect3Example "delivery failed: class=java.lang.IllegalStateException"
+          expect ConsoleExample "payment failed: class=java.lang.RuntimeException"
+          expect ContextualLoggingExample "all requests handled"
+          expect LogWithContextExample "A call-site value wins over the context"
+          expect NamedTupleExample "cart totalled"
+          expect WithoutEffectsExample "either logging succeeded: true"
+          expect ZioExample "All users created"
+
       - name: Binary compatibility
         run: sbt mimaReportBinaryIssues
