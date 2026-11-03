@@ -1,11 +1,14 @@
 package logging4s.core
 
-import java.util.UUID
+import java.nio.file.Path
+import java.net.{InetAddress, URI, URL}
 import java.time.{Duration as JavaDuration, *}
+import java.util.{Currency, Date, Locale, UUID}
 
+import scala.util.Try
 import scala.NamedTuple.NamedTuple
 import scala.deriving.Mirror
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import logging4s.core.config.LoggableEncodingConfig
 import logging4s.core.deriving.{macros, LoggableBuilder}
@@ -139,6 +142,22 @@ object Loggable extends LoggableMidPriority:
 
   given LoggableJavaDuration: Loggable[JavaDuration] = LoggableLong.contramap(_.toMillis, "time_ms")
 
+  given LoggableYear: Loggable[Year]             = LoggableInt.contramap(_.getValue, "year")
+  given LoggableYearMonth: Loggable[YearMonth]   = LoggableString.contramap(_.toString, "year_month")
+  given LoggableMonthDay: Loggable[MonthDay]     = LoggableString.contramap(_.toString, "month_day")
+  given LoggableMonth: Loggable[Month]           = LoggableString.contramap(_.toString, "month")
+  given LoggableDayOfWeek: Loggable[DayOfWeek]   = LoggableString.contramap(_.toString, "day_of_week")
+  given LoggablePeriod: Loggable[Period]         = LoggableString.contramap(_.toString, "period")
+  given LoggableZoneOffset: Loggable[ZoneOffset] = LoggableString.contramap(_.getId, "zone")
+  given LoggableDate: Loggable[Date]             = LoggableInstant.contramap(_.toInstant, "time")
+
+  given LoggableURI: Loggable[URI]                 = LoggableString.contramap(_.toString, "uri")
+  given LoggableURL: Loggable[URL]                 = LoggableString.contramap(_.toString, "url")
+  given LoggableInetAddress: Loggable[InetAddress] = LoggableString.contramap(_.getHostAddress, "ip")
+  given LoggablePath: Loggable[Path]               = LoggableString.contramap(_.toString, "path")
+  given LoggableLocale: Loggable[Locale]           = LoggableString.contramap(_.toLanguageTag, "locale")
+  given LoggableCurrency: Loggable[Currency]       = LoggableString.contramap(_.getCurrencyCode, "currency")
+
   private[core] val anyThrowable: Loggable[Throwable] = new:
     override val key: ValueKey = ValueKey("error")
 
@@ -185,6 +204,9 @@ object Loggable extends LoggableMidPriority:
       override val key: ValueKey                       = ValueKey.combine(AL.key, BL.key)
       override def plain(e: Either[A, B]): PlainString = e.fold(AL.plain, BL.plain)
       override def json(e: Either[A, B]): JsonString   = e.fold(AL.json, BL.json)
+
+  given LoggableTry: [A] => (L: Loggable[A]) => Loggable[Try[A]] =
+    LoggableEither(using anyThrowable, L).contramap(_.toEither)
 
   given LoggableTuple2: [A, B] => (Loggable[A], Loggable[B], LoggableEncodingConfig) => Loggable[(A, B)] =
     macros.deriveTuple
@@ -269,6 +291,13 @@ object Loggable extends LoggableMidPriority:
           JsonString(a.iterator.map((k, v) => s"${uniqueKey(objectKey(k), taken)}:${VL.json(v).value}").mkString("{", ",", "}"))
 
 private[core] trait LoggableMidPriority extends LoggableLowPriority:
+
+  given LoggableDuration: Loggable[Duration] = new:
+    override val key: ValueKey                   = ValueKey("time_ms")
+    override def plain(a: Duration): PlainString = PlainString(if a.isFinite then a.toMillis.toString else a.toString)
+    override def json(a: Duration): JsonString   = if a.isFinite then JsonString(a.toMillis.toString) else JsonString.Null
+
+  given LoggableZoneId: Loggable[ZoneId] = Loggable.LoggableString.contramap(_.getId, "zone")
 
   given LoggableSeq: [T] => (L: Loggable[T]) => Loggable[Seq[T]] =
     new:

@@ -9,10 +9,10 @@ final case class Contact(firstName: String, lastName: String)
 
 class OpaqueId(val raw: Int)
 
-final case class Link(uri: java.net.URI, hops: Int)
+final case class Link(target: OpaqueId, hops: Int)
 
 enum Target:
-  case Remote(uri: java.net.URI)
+  case Remote(id: OpaqueId)
   case Local(path: String)
 
 enum Delivery:
@@ -62,12 +62,12 @@ class FromEncodersSpec extends AnyWordSpec, Matchers:
       loggable.plain(Delivery.Pickup) shouldEqual "Pickup"
 
     "fall back to the JSON string as plain for a product with a field that has no Loggable" in:
-      given JsonEncoder[Link] = l => JsonString(s"""{"uri":"${l.uri}","hops":${l.hops}}""")
+      given JsonEncoder[Link] = l => JsonString(s"""{"target":${l.target.raw},"hops":${l.hops}}""")
 
       val loggable = Loggable.fromEncoders[Link]
-      val link     = Link(java.net.URI.create("https://logging4s.org"), 2)
+      val link     = Link(new OpaqueId(7), 2)
 
-      loggable.json(link) shouldEqual """{"uri":"https://logging4s.org","hops":2}"""
+      loggable.json(link) shouldEqual """{"target":7,"hops":2}"""
       loggable.plain(link) shouldEqual loggable.json(link).value
 
     "fall back to the JSON string as plain for a sum with a variant that cannot be derived" in:
