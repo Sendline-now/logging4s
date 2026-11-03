@@ -36,11 +36,35 @@ private[core] object macros:
     val plainEnc: PlainEncoder[A] =
       summonFrom {
         case pe: PlainEncoder[A] => pe
-        case given Mirror.Of[A]  => PlainEncoder.derived[A]
-        case _                   => (a: A) => PlainString(enc.encode(a).value)
+        case _                   =>
+          inline if derivable[A]
+          then PlainEncoder.derived[A](using summonInline[Mirror.Of[A]])
+          else (a: A) => PlainString(enc.encode(a).value)
       }
 
     EncodersLoggable[A](key, enc, plainEnc)
+
+  private inline def derivable[A]: Boolean = ${ derivableImpl[A] }
+
+  private def derivableImpl[A: Type](using Quotes): Expr[Boolean] = Expr(canDerive(Type.of[A]))
+
+  private def canDerive(tpe: Type[?])(using Quotes): Boolean =
+    tpe match
+      case '[a] =>
+        Expr.summon[Mirror.Of[a]] match
+          case Some('{ $_ : Mirror.ProductOf[a] { type MirroredElemTypes = elems } }) => elemTypes[elems].forall(hasLoggable)
+          case Some('{ $_ : Mirror.SumOf[a] { type MirroredElemTypes = elems } })     =>
+            elemTypes[elems].forall(variant => hasLoggable(variant) || canDerive(variant))
+          case _                                                                      => false
+
+  private def hasLoggable(tpe: Type[?])(using Quotes): Boolean =
+    tpe match
+      case '[a] => Expr.summon[Loggable[a]].isDefined
+
+  private def elemTypes[T: Type](using Quotes): List[Type[?]] =
+    Type.of[T] match
+      case '[h *: t] => Type.of[h] :: elemTypes[t]
+      case _         => Nil
 
   inline def deriveProduct[A](using p: Mirror.ProductOf[A], cfg: LoggableEncodingConfig): Loggable[A] =
     deriveProductWith[A](Map.empty)
