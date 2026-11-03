@@ -5,8 +5,8 @@ import scala.util.Try
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
-import logging4s.core.{Level, Logging, LoggingContext}
 import logging4s.core.syntax.all.*
+import logging4s.core.{Delay, Identity, Level, Logging, LoggingContext}
 
 final case class CapturedRecord(message: String, fields: Seq[(String, String)]):
   def keys: Seq[String]                  = fields.map(_._1)
@@ -19,7 +19,7 @@ trait BackendConformance extends AnyWordSpec, Matchers:
 
   def capture(loggerName: String)(run: Logging[Try] => Unit): CapturedRecord
 
-  def capturedAtLevel(loggerName: String, threshold: Level)(run: Logging[Try] => Unit): Option[CapturedRecord] = None
+  def atInfo(loggerName: String)(using Delay[Identity]): Logging[Identity]
 
   s"$backendName, as a logging4s backend," must:
 
@@ -87,3 +87,22 @@ trait BackendConformance extends AnyWordSpec, Matchers:
       val record = capture(s"$backendName-conformance-message")(_.info("user created", 7.asLogValue("id")))
 
       record.message should startWith("user created")
+
+    "build no effect for a record below the logger's level" in:
+      var delays = 0
+
+      given Delay[Identity] = new:
+        override def delay[A](a: => A): Identity[A] =
+          delays += 1
+          a
+
+        override val unit: Identity[Unit] = ()
+
+      val logging = atInfo(s"$backendName-conformance-gate")
+      delays = 0
+
+      logging.debug("event", 1.asLogValue("n"))
+      logging.emit(Level.Debug, "event", None, Seq(1.asLogValue("n")))
+      logging.withContext(LoggingContext(1.asLogValue("n"))).trace("event")
+
+      delays shouldEqual 0

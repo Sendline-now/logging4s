@@ -8,7 +8,7 @@ import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.{Level as Log4jLevel, LogManager}
 import org.apache.logging.log4j.core.config.{Configuration, LoggerConfig, Property}
 
-import logging4s.core.Logging
+import logging4s.core.{Delay, Identity, Logging}
 import logging4s.core.conformance.{BackendConformance, CapturedRecord, JsonRecord}
 
 import Log4j2Instances.given
@@ -25,6 +25,14 @@ class Log4j2ConformanceSpec extends BackendConformance:
   Log4j2Warmup.touch()
 
   override def backendName: String = "log4j2"
+
+  override def atInfo(loggerName: String)(using Delay[Identity]): Logging[Identity] =
+    Log4j2ConformanceSpec.configurationLock.synchronized {
+      val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
+      context.getConfiguration.addLogger(loggerName, new LoggerConfig(loggerName, Log4jLevel.INFO, false))
+      context.updateLoggers()
+    }
+    Logging.create[Identity](loggerName)
 
   override def capture(loggerName: String)(run: Logging[Try] => Unit): CapturedRecord =
     Log4j2ConformanceSpec.configurationLock.synchronized {

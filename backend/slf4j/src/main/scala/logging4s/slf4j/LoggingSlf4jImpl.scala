@@ -19,15 +19,17 @@ private[slf4j] class LoggingSlf4jImpl[F[*]: Delay](
     LoggingSlf4jImpl(logger, LogRecord.context(ctxValues, moreContext))
 
   override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using position: Position): F[Unit] =
-    Delay[F].delay {
-      if enabled(level) then
-        val record = LogRecord.prepare(ctxValues, values, position)
+    if !enabled(level) then unit
+    else
+      Delay[F].delay {
+        if enabled(level) then
+          val record = LogRecord.prepare(ctxValues, values, position)
 
-        val withCause     = cause.fold(builder(level))(builder(level).setCause)
-        val withKeyValues = record.structured.foldLeft(withCause) { (b, v) => b.addKeyValue(v.key.value, v.json.value) }
+          val withCause     = cause.fold(builder(level))(builder(level).setCause)
+          val withKeyValues = record.structured.foldLeft(withCause) { (b, v) => b.addKeyValue(v.key.value, v.json.value) }
 
-        withKeyValues.log(LogMessage.render(message, cause, record.values))
-    }
+          withKeyValues.log(LogMessage.render(message, cause, record.values))
+      }
 
   override def unit: F[Unit] = Delay[F].unit
 

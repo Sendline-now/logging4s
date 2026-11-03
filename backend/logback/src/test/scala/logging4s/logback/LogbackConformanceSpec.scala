@@ -9,7 +9,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.OutputStreamAppender
 import ch.qos.logback.classic.{Level as LogbackLevel, Logger as LogbackLogger}
 
-import logging4s.core.Logging
+import logging4s.core.{Delay, Identity, Logging}
 import logging4s.core.conformance.{BackendConformance, CapturedRecord, JsonRecord}
 
 import LogbackInstances.given
@@ -19,6 +19,10 @@ class LogbackConformanceSpec extends BackendConformance:
   LogbackWarmup.touch()
 
   override def backendName: String = "logback"
+
+  override def atInfo(loggerName: String)(using Delay[Identity]): Logging[Identity] =
+    LoggerFactory.getLogger(loggerName).asInstanceOf[LogbackLogger].setLevel(LogbackLevel.INFO)
+    Logging.create[Identity](loggerName)
 
   override def capture(loggerName: String)(run: Logging[Try] => Unit): CapturedRecord =
     LoggingLogbackJsonSpec.appenderLock.synchronized {

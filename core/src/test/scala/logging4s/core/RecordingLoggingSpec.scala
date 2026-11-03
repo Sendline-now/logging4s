@@ -51,3 +51,20 @@ class RecordingLoggingSpec extends AnyWordSpec, Matchers:
       event.values.map(_.key.value) shouldEqual Seq("n")
       event.context.map(_.key.value) shouldEqual Seq("service")
       event.keys shouldEqual Seq("service", "n")
+
+    "build no effect for a record below its threshold" in:
+      var delays = 0
+
+      given Delay[Identity] = new:
+        override def delay[A](a: => A): Identity[A] =
+          delays += 1
+          a
+
+        override val unit: Identity[Unit] = ()
+
+      val log = RecordingLogging[Identity](Level.Info)
+
+      log.emit(Level.Debug, "x", None, Nil)
+
+      delays shouldEqual 0
+      log.recorded shouldBe empty

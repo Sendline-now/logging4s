@@ -18,14 +18,16 @@ private[log4j2] class LoggingLog4j2Impl[F[*]: Delay](
     LoggingLog4j2Impl(logger, LogRecord.context(ctxValues, moreContext))
 
   override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using position: Position): F[Unit] =
-    Delay[F].delay {
-      if enabled(level) then
-        val record  = LogRecord.prepare(ctxValues, values, position, LogRecord.ReservedKeys)
-        val entries = record.structured.map(v => v.key.value -> v.json.value)
-        val payload = LoggableMapMessage(entries, LogMessage.render(message, cause, record.values))
+    if !enabled(level) then unit
+    else
+      Delay[F].delay {
+        if enabled(level) then
+          val record  = LogRecord.prepare(ctxValues, values, position, LogRecord.ReservedKeys)
+          val entries = record.structured.map(v => v.key.value -> v.json.value)
+          val payload = LoggableMapMessage(entries, LogMessage.render(message, cause, record.values))
 
-        write(level, payload, cause.orNull)
-    }
+          write(level, payload, cause.orNull)
+      }
 
   override def unit: F[Unit] = Delay[F].unit
 

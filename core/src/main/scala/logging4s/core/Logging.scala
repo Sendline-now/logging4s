@@ -24,77 +24,79 @@ trait Logging[F[*]]:
       override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): G[Unit] =
         f(self.emit(level, message, cause, values))
 
-  final inline def error(inline message: String)(using Position): F[Unit] =
-    emit(Level.Error, LogMessage.static(message), None, Nil)
+  final inline def error(inline message: String)(using inline position: Position): F[Unit] =
+    if enabled(Level.Error) then emit(Level.Error, LogMessage.static(message), None, Nil) else unit
 
-  final inline def error(inline message: String, error: Throwable)(using Position): F[Unit] =
-    emit(Level.Error, LogMessage.static(message), Some(error), Nil)
+  final inline def error(inline message: String, inline error: Throwable)(using inline position: Position): F[Unit] =
+    if enabled(Level.Error) then emit(Level.Error, LogMessage.static(message), Some(error), Nil) else unit
 
-  final inline def error(inline message: String, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Error, LogMessage.static(message), None, values)
+  final inline def error(inline message: String, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Error) then emit(Level.Error, LogMessage.static(message), None, values) else unit
 
-  final inline def error(inline message: String, error: Throwable, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Error, LogMessage.static(message), Some(error), values)
+  final inline def error(inline message: String, inline error: Throwable, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Error) then emit(Level.Error, LogMessage.static(message), Some(error), values) else unit
 
-  final inline def warn(inline message: String)(using Position): F[Unit] =
-    emit(Level.Warn, LogMessage.static(message), None, Nil)
+  final inline def warn(inline message: String)(using inline position: Position): F[Unit] =
+    if enabled(Level.Warn) then emit(Level.Warn, LogMessage.static(message), None, Nil) else unit
 
-  final inline def warn(inline message: String, error: Throwable)(using Position): F[Unit] =
-    emit(Level.Warn, LogMessage.static(message), Some(error), Nil)
+  final inline def warn(inline message: String, inline error: Throwable)(using inline position: Position): F[Unit] =
+    if enabled(Level.Warn) then emit(Level.Warn, LogMessage.static(message), Some(error), Nil) else unit
 
-  final inline def warn(inline message: String, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Warn, LogMessage.static(message), None, values)
+  final inline def warn(inline message: String, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Warn) then emit(Level.Warn, LogMessage.static(message), None, values) else unit
 
-  final inline def warn(inline message: String, error: Throwable, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Warn, LogMessage.static(message), Some(error), values)
+  final inline def warn(inline message: String, inline error: Throwable, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Warn) then emit(Level.Warn, LogMessage.static(message), Some(error), values) else unit
 
-  final inline def info(inline message: String)(using Position): F[Unit] =
-    emit(Level.Info, LogMessage.static(message), None, Nil)
+  final inline def info(inline message: String)(using inline position: Position): F[Unit] =
+    if enabled(Level.Info) then emit(Level.Info, LogMessage.static(message), None, Nil) else unit
 
-  final inline def info(inline message: String, error: Throwable)(using Position): F[Unit] =
-    emit(Level.Info, LogMessage.static(message), Some(error), Nil)
+  final inline def info(inline message: String, inline error: Throwable)(using inline position: Position): F[Unit] =
+    if enabled(Level.Info) then emit(Level.Info, LogMessage.static(message), Some(error), Nil) else unit
 
-  final inline def info(inline message: String, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Info, LogMessage.static(message), None, values)
+  final inline def info(inline message: String, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Info) then emit(Level.Info, LogMessage.static(message), None, values) else unit
 
-  final inline def info(inline message: String, error: Throwable, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Info, LogMessage.static(message), Some(error), values)
+  final inline def info(inline message: String, inline error: Throwable, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Info) then emit(Level.Info, LogMessage.static(message), Some(error), values) else unit
 
-  final inline def debug(inline message: String)(using Position): F[Unit] =
-    emit(Level.Debug, LogMessage.static(message), None, Nil)
+  final inline def debug(inline message: String)(using inline position: Position): F[Unit] =
+    if enabled(Level.Debug) then emit(Level.Debug, LogMessage.static(message), None, Nil) else unit
 
-  final inline def debug(inline message: String, error: Throwable)(using Position): F[Unit] =
-    emit(Level.Debug, LogMessage.static(message), Some(error), Nil)
+  final inline def debug(inline message: String, inline error: Throwable)(using inline position: Position): F[Unit] =
+    if enabled(Level.Debug) then emit(Level.Debug, LogMessage.static(message), Some(error), Nil) else unit
 
-  final inline def debug(inline message: String, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Debug, LogMessage.static(message), None, values)
+  final inline def debug(inline message: String, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Debug) then emit(Level.Debug, LogMessage.static(message), None, values) else unit
 
-  final inline def debug(inline message: String, error: Throwable, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Debug, LogMessage.static(message), Some(error), values)
+  final inline def debug(inline message: String, inline error: Throwable, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Debug) then emit(Level.Debug, LogMessage.static(message), Some(error), values) else unit
 
-  final inline def trace(inline message: String)(using Position): F[Unit] =
-    emit(Level.Trace, LogMessage.static(message), None, Nil)
+  final inline def trace(inline message: String)(using inline position: Position): F[Unit] =
+    if enabled(Level.Trace) then emit(Level.Trace, LogMessage.static(message), None, Nil) else unit
 
-  final inline def trace(inline message: String, error: Throwable)(using Position): F[Unit] =
-    emit(Level.Trace, LogMessage.static(message), Some(error), Nil)
+  final inline def trace(inline message: String, inline error: Throwable)(using inline position: Position): F[Unit] =
+    if enabled(Level.Trace) then emit(Level.Trace, LogMessage.static(message), Some(error), Nil) else unit
 
-  final inline def trace(inline message: String, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Trace, LogMessage.static(message), None, values)
+  final inline def trace(inline message: String, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Trace) then emit(Level.Trace, LogMessage.static(message), None, values) else unit
 
-  final inline def trace(inline message: String, error: Throwable, values: LoggableValue*)(using Position): F[Unit] =
-    emit(Level.Trace, LogMessage.static(message), Some(error), values)
+  final inline def trace(inline message: String, inline error: Throwable, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(Level.Trace) then emit(Level.Trace, LogMessage.static(message), Some(error), values) else unit
 
-  final inline def log(level: Level, inline message: String)(using Position): F[Unit] =
-    emit(level, LogMessage.static(message), None, Nil)
+  final inline def log(level: Level, inline message: String)(using inline position: Position): F[Unit] =
+    if enabled(level) then emit(level, LogMessage.static(message), None, Nil) else unit
 
-  final inline def log(level: Level, inline message: String, error: Throwable)(using Position): F[Unit] =
-    emit(level, LogMessage.static(message), Some(error), Nil)
+  final inline def log(level: Level, inline message: String, inline error: Throwable)(using inline position: Position): F[Unit] =
+    if enabled(level) then emit(level, LogMessage.static(message), Some(error), Nil) else unit
 
-  final inline def log(level: Level, inline message: String, values: LoggableValue*)(using Position): F[Unit] =
-    emit(level, LogMessage.static(message), None, values)
+  final inline def log(level: Level, inline message: String, inline values: LoggableValue*)(using inline position: Position): F[Unit] =
+    if enabled(level) then emit(level, LogMessage.static(message), None, values) else unit
 
-  final inline def log(level: Level, inline message: String, error: Throwable, values: LoggableValue*)(using Position): F[Unit] =
-    emit(level, LogMessage.static(message), Some(error), values)
+  final inline def log(level: Level, inline message: String, inline error: Throwable, inline values: LoggableValue*)(using
+      inline position: Position
+  ): F[Unit] =
+    if enabled(level) then emit(level, LogMessage.static(message), Some(error), values) else unit
 
 object Logging:
 

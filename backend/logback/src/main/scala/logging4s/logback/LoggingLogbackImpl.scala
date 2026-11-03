@@ -18,14 +18,16 @@ private[logback] class LoggingLogbackImpl[F[*]: Delay](
     LoggingLogbackImpl(logger, LogRecord.context(ctxValues, moreContext))
 
   override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using position: Position): F[Unit] =
-    Delay[F].delay {
-      if enabled(level) then
-        val record = LogRecord.prepare(ctxValues, values, position, LogRecord.ReservedKeys)
-        val text   = LogMessage.render(message, cause, record.values)
+    if !enabled(level) then unit
+    else
+      Delay[F].delay {
+        if enabled(level) then
+          val record = LogRecord.prepare(ctxValues, values, position, LogRecord.ReservedKeys)
+          val text   = LogMessage.render(message, cause, record.values)
 
-        if record.structured.isEmpty then write(level, text, cause)
-        else write(level, MarkerHelper.fromLoggable(record.structured), text, cause)
-    }
+          if record.structured.isEmpty then write(level, text, cause)
+          else write(level, MarkerHelper.fromLoggable(record.structured), text, cause)
+      }
 
   override def unit: F[Unit] = Delay[F].unit
 

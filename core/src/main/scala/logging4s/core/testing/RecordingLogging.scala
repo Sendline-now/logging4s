@@ -36,12 +36,13 @@ final class RecordingLogging[F[*]: Delay] private (
   override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
       position: Position
   ): F[Unit] =
-    Delay[F].delay {
-      if enabled(level) then
+    if !enabled(level) then unit
+    else
+      Delay[F].delay {
         val record = LogRecord.prepare(context, values, position, LogRecord.ReservedKeys)
         val event  = RecordedEvent(level, message, cause, LoggableValue.normalizeKeys(values), context, record.values, position)
         state.updateAndGet(_ :+ event): Unit
-    }
+      }
 
   def recorded: Vector[RecordedEvent] = state.get
 
