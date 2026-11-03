@@ -1,6 +1,8 @@
 package logging4s.logback
 
+import java.time.Instant
 import java.io.ByteArrayOutputStream
+import java.time.temporal.ChronoUnit
 
 import scala.util.Try
 
@@ -10,6 +12,7 @@ import org.scalatest.matchers.should.Matchers
 import org.slf4j.{LoggerFactory, MDC}
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.OutputStreamAppender
+import net.logstash.logback.marker.{LogstashMarker, Markers}
 import ch.qos.logback.classic.{Level, Logger as LogbackLogger}
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 
@@ -28,6 +31,9 @@ class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
     mapper.readTree(captureLine(loggerName)(run))
 
   private def captureLine(loggerName: String)(run: Logging[Try] => Unit): String =
+    captureDirect(loggerName)(_ => run(Logging.createTry(loggerName).get))
+
+  private def captureDirect(loggerName: String)(run: LogbackLogger => Unit): String =
     LoggingLogbackJsonSpec.appenderLock.synchronized {
       val logbackLogger = LoggerFactory.getLogger(loggerName).asInstanceOf[LogbackLogger]
       logbackLogger.setLevel(Level.TRACE)
@@ -46,9 +52,7 @@ class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
       appender.start()
 
       logbackLogger.addAppender(appender)
-      try
-        val logging = Logging.createTry(loggerName).get
-        run(logging)
+      try run(logbackLogger)
       finally
         appender.stop()
         logbackLogger.detachAppender(appender)
@@ -129,31 +133,54 @@ class Logging4sEncoderSpec extends AnyWordSpec, Matchers:
       json.get("b").asInt() shouldEqual 2
 
     "keep structured data that plain SLF4J code attached through the fluent API" in:
-      val json = LoggingLogbackJsonSpec.appenderLock.synchronized {
-        val logbackLogger = LoggerFactory.getLogger("Logging4sEncoderSpec-fluent").asInstanceOf[LogbackLogger]
-        logbackLogger.setLevel(Level.TRACE)
-
-        val context = logbackLogger.getLoggerContext
-        val out     = new ByteArrayOutputStream()
-
-        val encoder = new Logging4sEncoder()
-        encoder.setContext(context)
-        encoder.start()
-
-        val appender = new OutputStreamAppender[ILoggingEvent]()
-        appender.setContext(context)
-        appender.setEncoder(encoder)
-        appender.setOutputStream(out)
-        appender.start()
-
-        logbackLogger.addAppender(appender)
-        try logbackLogger.atInfo().addKeyValue("request_id", "abc").log("event")
-        finally
-          appender.stop()
-          logbackLogger.detachAppender(appender)
-
-        mapper.readTree(out.toString("UTF-8"))
-      }
+      val json = mapper.readTree(captureDirect("Logging4sEncoderSpec-fluent") { logger =>
+        logger.atInfo().addKeyValue("request_id", "abc").log("event")
+      })
 
       json.get("request_id").asText() shouldEqual "abc"
       json.get("message").asText() shouldEqual "event"
+
+    "write a key-value pair and an MDC entry that carry no value as JSON null, keeping the line" in:
+      val json = mapper.readTree(captureDirect("Logging4sEncoderSpec-null-ambient") { logger =>
+        withMdc("tenant" -> null)(logger.atInfo().addKeyValue("request_id", null: Object).log("event"))
+      })
+
+      json.get("tenant").isNull shouldEqual true
+      json.get("request_id").isNull shouldEqual true
+      json.get("message").asText() shouldEqual "event"
+
+    "write an empty message when the event carries none" in:
+      val json = mapper.readTree(captureDirect("Logging4sEncoderSpec-no-message")(_.info(null: String)))
+
+      json.get("message").asText() shouldEqual ""
+
+    "write the cause's stack trace under stack_trace" in:
+      val json = capture("Logging4sEncoderSpec-cause") { logging =>
+        logging.error("failed", new IllegalStateException("kaboom"))
+      }
+
+      json.get("stack_trace").asText() should startWith("java.lang.IllegalStateException: kaboom")
+      json.get("stack_trace").asText() should include("at logging4s.logback.Logging4sEncoderSpec")
+
+    "leave stack_trace out when there is no cause" in:
+      capture("Logging4sEncoderSpec-no-cause")(_.info("handled")).has("stack_trace") shouldEqual false
+
+    "name the thread that logged the event" in:
+      capture("Logging4sEncoderSpec-thread")(_.info("handled")).get("thread").asText() shouldEqual Thread.currentThread.getName
+
+    "write @timestamp as an ISO-8601 instant in UTC, at the time of the call" in:
+      val before    = Instant.now.truncatedTo(ChronoUnit.MILLIS)
+      val timestamp = capture("Logging4sEncoderSpec-timestamp")(_.info("handled")).get("@timestamp").asText()
+      val after     = Instant.now
+
+      timestamp should endWith("Z")
+      Instant.parse(timestamp) should (be >= before and be <= after)
+
+    "find logging4s values referenced from another marker and ignore that marker's own fields" in:
+      val user   = LoggableValue(ValueKey("user"), PlainString("bob"), JsonString("\"bob\""))
+      val marker = Markers.append("foreign", "x").and[LogstashMarker](LoggableValuesMarker(Seq(user)))
+
+      val json = mapper.readTree(captureDirect("Logging4sEncoderSpec-marker-tree")(_.info(marker, "event")))
+
+      json.get("user").asText() shouldEqual "bob"
+      json.has("foreign") shouldEqual false

@@ -27,7 +27,8 @@ object StructuredJson:
 
     def field(key: String, value: String): Unit =
       separate()
-      JsonString.appendQuoted(JsonString.appendQuoted(sb, key).append(':'), value): Unit
+      JsonString.appendQuoted(sb, key).append(':'): Unit
+      if value == null then sb.append(JsonString.Null.value): Unit else JsonString.appendQuoted(sb, value): Unit
 
     def fields(entries: Iterable[(String, String)]): Unit =
       entries.foreach((key, value) => field(key, value))

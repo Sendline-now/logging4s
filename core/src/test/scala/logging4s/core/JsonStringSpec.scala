@@ -46,3 +46,10 @@ class JsonStringSpec extends AnyWordSpec, Matchers:
       builder.value(LoggableValue(ValueKey("k\\"), PlainString("1"), JsonString("1")))
 
       builder.result shouldEqual """{"a\"b":"line1\nline2","k\\":1}"""
+
+    "write a field without a value as JSON null" in:
+      val builder = StructuredJson.Builder()
+      builder.field("tenant", null)
+      builder.field("x", "y")
+
+      builder.result shouldEqual """{"tenant":null,"x":"y"}"""

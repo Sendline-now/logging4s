@@ -46,7 +46,7 @@ class Logging4sEncoder extends EncoderBase[ILoggingEvent]:
           builder.field(name, value)
 
       mdc.forEach((key, value) => ambient(key, value))
-      if keyValues != null then keyValues.forEach(pair => ambient(pair.key, String.valueOf(pair.value)))
+      if keyValues != null then keyValues.forEach(pair => ambient(pair.key, if pair.value == null then null else pair.value.toString))
 
     if throwable != null then builder.field("stack_trace", ThrowableProxyUtil.asString(throwable))
 
