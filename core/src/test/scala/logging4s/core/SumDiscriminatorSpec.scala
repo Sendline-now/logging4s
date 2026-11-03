@@ -21,10 +21,19 @@ class SumDiscriminatorSpec extends AnyWordSpec, Matchers:
       loggable.json(Payment.Card("1234")) shouldEqual """{"type":"Card","last4":"1234"}"""
       loggable.json(Payment.Cash(10)) shouldEqual """{"type":"Cash","amount":10}"""
 
-    "leave a singleton case as its name, which already says which variant it is" in:
+    "render a singleton case as an object with only the tag, so the field keeps one JSON type" in:
       given LoggableEncodingConfig = tagged
 
+      Loggable.derived[Payment].json(Payment.Pending) shouldEqual """{"type":"Pending"}"""
+      Loggable.derived[Shape].json(Dot) shouldEqual """{"type":"Dot"}"""
+
+    "leave a singleton case as its name without a discriminator" in:
       Loggable.derived[Payment].json(Payment.Pending) shouldEqual "\"Pending\""
+
+    "leave a variant with its own non-object rendering untouched" in:
+      given LoggableEncodingConfig = tagged
+
+      Loggable.derived[Status].json(Status.Code(7)) shouldEqual "7"
 
     "keep the plain rendering unchanged" in:
       given LoggableEncodingConfig = tagged
@@ -56,3 +65,11 @@ object SumDiscriminatorSpec:
   sealed trait Round                   extends Shape
   final case class Circle(radius: Int) extends Round
   final case class Square(side: Int)   extends Shape
+  case object Dot                      extends Round
+
+  enum Status:
+    case Code(value: Int)
+    case Unknown
+
+  object Status:
+    given Loggable[Code] = Loggable.make[Code](code => JsonString(code.value.toString), code => PlainString(code.value.toString))

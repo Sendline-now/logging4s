@@ -73,6 +73,8 @@ final class ProductLoggable[A](
 
   override val key: ValueKey = ValueKey(decapitalize(typeName))
 
+  private[internal] def fieldless: Boolean = specs.isEmpty
+
   private[internal] lazy val fieldNames: List[String] =
     specs.filterNot(_.policy.hidden).flatMap { spec =>
       if spec.policy.unembedded
@@ -205,17 +207,26 @@ final class SumLoggable[A](
               Some(s"${JsonString.quoted(name).value}:${JsonString.quoted(label).value}")
         }
 
+  private lazy val fieldless: Vector[Boolean] =
+    variants.map {
+      case product: ProductLoggable[?] => product.fieldless
+      case _                           => false
+    }
+
   override val key: ValueKey = ValueKey(decapitalize(typeName))
 
   override def json(a: A): JsonString =
     val ordinal = mirror.ordinal(a)
-    val raw     = variants(ordinal).json(a).value
 
     tags(ordinal) match
-      case Some(tag) if raw.length >= 2 && raw.charAt(0) == '{' && raw.charAt(raw.length - 1) == '}' =>
-        if raw.length == 2 then JsonString(s"{$tag}") else JsonString(s"{$tag,${raw.substring(1)}")
-      case _                                                                                         =>
-        JsonString(raw)
+      case Some(tag) if fieldless(ordinal) => JsonString(s"{$tag}")
+      case Some(tag)                       => tagged(tag, variants(ordinal).json(a).value)
+      case None                            => variants(ordinal).json(a)
+
+  private def tagged(tag: String, raw: String): JsonString =
+    if raw.length < 2 || raw.charAt(0) != '{' || raw.charAt(raw.length - 1) != '}' then JsonString(raw)
+    else if raw.length == 2 then JsonString(s"{$tag}")
+    else JsonString(s"{$tag,${raw.substring(1)}")
 
   override def plain(a: A): PlainString = variants(mirror.ordinal(a)).plain(a)
 
