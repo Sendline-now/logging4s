@@ -1,11 +1,14 @@
 package logging4s.core
 
+import scala.compiletime.testing.typeCheckErrors
+
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
 import logging4s.core.deriving.MaskMode
 
 class LoggableBuilderSpec extends AnyWordSpec, Matchers:
+  import LoggableBuilderSpec.*
 
   "Loggable.deriving builder" must:
     "hide a field from both json and plain" in:
@@ -78,3 +81,23 @@ class LoggableBuilderSpec extends AnyWordSpec, Matchers:
       val loggable = Loggable.deriving[Wrapper].unembed(_.owner).rename(_.owner, "holder").derived
 
       loggable.json(Wrapper(Account(1, "4242"))) shouldEqual """{"user_id":1,"card_number":"4242"}"""
+
+  "Loggable.deriving builder selectors" must:
+    "reject a nested path, since a policy applies to a field of the type itself" in:
+      errorsOf("Loggable.deriving[Person].hide(_.address.city)") should include("Expected a direct field selector like _.field, but got:")
+
+    "reject a lambda that selects nothing, or calls a method" in:
+      errorsOf("Loggable.deriving[Account].hide(_ => 1)") should include("Expected a direct field selector like _.field, but got:")
+      errorsOf("Loggable.deriving[Account].hide(_.cardNumber.trim())") should include("Expected a direct field selector like _.field, but got:")
+
+    "reject a selector that is not a lambda literal" in:
+      errorsOf("val selector: Account => Any = _.userId; Loggable.deriving[Account].hide(selector)") should
+        include("Expected a lambda field selector like _.field, but got:")
+
+    "reject a member that is not a constructor field, which no policy would ever reach" in:
+      errorsOf("Loggable.deriving[Account].hide(_.productPrefix)") should
+        include("Expected a constructor field of Account like _.field, but productPrefix is not one")
+
+object LoggableBuilderSpec:
+
+  inline def errorsOf(inline code: String): String = typeCheckErrors(code).map(_.message).mkString("\n")

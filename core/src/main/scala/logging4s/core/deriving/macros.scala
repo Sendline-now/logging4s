@@ -127,9 +127,18 @@ private[core] object macros:
         case Typed(inner, _)      => unwrap(inner)
         case other                => other
 
+    def constructorField(field: String): Expr[String] =
+      val owner = TypeRepr.of[A].typeSymbol
+      if !owner.flags.is(Flags.Case) || owner.caseFields.exists(_.name == field)
+      then Expr(field)
+      else
+        report.errorAndAbort(
+          s"Expected a constructor field of ${owner.name} like _.field, but $field is not one, so a policy on it would apply to nothing"
+        )
+
     unwrap(selector.asTerm) match
       case Lambda(List(param), body) =>
         unwrap(body) match
-          case Select(Ident(name), field) if name == param.name => Expr(field)
+          case Select(Ident(name), field) if name == param.name => constructorField(field)
           case other                                            => report.errorAndAbort(s"Expected a direct field selector like _.field, but got: ${other.show}")
       case other                     => report.errorAndAbort(s"Expected a lambda field selector like _.field, but got: ${other.show}")
