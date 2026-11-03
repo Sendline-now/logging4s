@@ -7,7 +7,6 @@ import logging4s.core.syntax.all.*
 
 import logging4s.cats.CatsInstances.given
 import logging4s.logback.LogbackInstances.given
-import logging4s.json.circe.CirceInstances.given
 
 object LogWithContextExample extends IOApp:
 
@@ -17,7 +16,7 @@ object LogWithContextExample extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
     for
-      context <- IO.randomUUID.map(uuid => LoggingContext(uuid.withKey("session_id")))
+      context <- IO.randomUUID.map(uuid => LoggingContext(uuid.asLogValue("session_id")))
       logging <- Logging.create[IO]("CatsEffectExampleLogging", context)
 
       johnShow <- createUser("John Show", 22)
