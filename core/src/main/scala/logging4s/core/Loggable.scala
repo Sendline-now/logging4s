@@ -46,7 +46,7 @@ trait Loggable[A]:
       override def plain(a: A): PlainString = PlainString(mask)
       override def json(a: A): JsonString   = JsonString.quoted(mask)
 
-object Loggable extends LoggableLowPriority:
+object Loggable extends LoggableMidPriority:
   inline def apply[A](using instance: Loggable[A]): Loggable[A] = instance
 
   inline def derived[A](using Mirror.Of[A]): Loggable[A] = macros.derived[A]
@@ -164,6 +164,13 @@ object Loggable extends LoggableLowPriority:
       override def json(t: Option[T]): JsonString   = t.fold(JsonString.Null)(L.json)
       override def isAbsent(t: Option[T]): Boolean  = t.forall(L.isAbsent)
 
+  given LoggableNone: Loggable[None.type] =
+    new:
+      override val key: ValueKey                    = ValueKey("none")
+      override def plain(n: None.type): PlainString = PlainString("")
+      override def json(n: None.type): JsonString   = JsonString.Null
+      override def isAbsent(n: None.type): Boolean  = true
+
   given LoggableEither: [A, B] => (AL: Loggable[A], BL: Loggable[B]) => Loggable[Either[A, B]] =
     new:
       override val key: ValueKey                       = ValueKey.combine(AL.key, BL.key)
@@ -216,12 +223,6 @@ object Loggable extends LoggableLowPriority:
       override def plain(a: Array[T]): PlainString = PlainString.array(a.toSeq.map(L.plain)*)
       override def json(a: Array[T]): JsonString   = JsonString.array(a.toSeq.map(L.json)*)
 
-  given LoggableSeq: [T] => (L: Loggable[T]) => Loggable[Seq[T]] =
-    new:
-      override val key: ValueKey                 = L.key.pluralized
-      override def plain(a: Seq[T]): PlainString = PlainString.array(a.map(L.plain)*)
-      override def json(a: Seq[T]): JsonString   = JsonString.array(a.map(L.json)*)
-
   given LoggableMap: [K, V] => (KL: Loggable[K], VL: Loggable[V], cfg: LoggableEncodingConfig) => Loggable[Map[K, V]] =
     new:
       private val entry: Loggable[(K, V)] = Loggable[(K, V)]
@@ -258,12 +259,29 @@ object Loggable extends LoggableLowPriority:
           val taken = scala.collection.mutable.HashSet.empty[String]
           JsonString(a.iterator.map((k, v) => s"${uniqueKey(objectKey(k), taken)}:${VL.json(v).value}").mkString("{", ",", "}"))
 
+private[core] trait LoggableMidPriority extends LoggableLowPriority:
+
+  given LoggableSeq: [T] => (L: Loggable[T]) => Loggable[Seq[T]] =
+    new:
+      override val key: ValueKey                 = L.key.pluralized
+      override def plain(a: Seq[T]): PlainString = PlainString.array(a.map(L.plain)*)
+      override def json(a: Seq[T]): JsonString   = JsonString.array(a.map(L.json)*)
+
+  given LoggableSome: [T] => (L: Loggable[Option[T]]) => Loggable[Some[T]] = L.contramap(identity)
+
 private[core] trait LoggableLowPriority:
 
   given LoggableThrowable: [E <: Throwable] => Loggable[E] = Loggable.anyThrowable.asInstanceOf[Loggable[E]]
 
-  given LoggableContainer: [T, C[*]] => (L: Loggable[T], ev: C[T] => Iterable[T]) => Loggable[C[T]] =
+  given LoggableContainer: [T, C[*]] => (L: Loggable[T], ev: C[T] <:< Iterable[T]) => Loggable[C[T]] =
+    container(L, ev)
+
+  @deprecated("kept for binary compatibility, C[T] must now be a subtype of Iterable[T]", "6.1.0")
+  def LoggableContainer[T, C[*]](L: Loggable[T], ev: C[T] => Iterable[T]): Loggable[C[T]] =
+    container(L, ev)
+
+  private def container[T, C[*]](L: Loggable[T], iterable: C[T] => Iterable[T]): Loggable[C[T]] =
     new:
       override val key: ValueKey               = L.key.pluralized
-      override def plain(a: C[T]): PlainString = PlainString.array(ev(a).toSeq.map(L.plain)*)
-      override def json(a: C[T]): JsonString   = JsonString.array(ev(a).toSeq.map(L.json)*)
+      override def plain(a: C[T]): PlainString = PlainString.array(iterable(a).toSeq.map(L.plain)*)
+      override def json(a: C[T]): JsonString   = JsonString.array(iterable(a).toSeq.map(L.json)*)
