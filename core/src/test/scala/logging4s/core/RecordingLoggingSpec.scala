@@ -18,6 +18,18 @@ class RecordingLoggingSpec extends AnyWordSpec, Matchers:
       event.keys shouldEqual Seq("user")
       event.valueOf("user") shouldEqual Some("\"call\"")
 
+    "read a field as JSON or as plain text, valueOf being the JSON form" in:
+      val log = RecordingLogging[Identity]()
+
+      log.info("x", "svc".asLogValue("service"), 3.asLogValue("n"))
+
+      val event = log.recorded.head
+      event.jsonOf("service") shouldEqual Some("\"svc\"")
+      event.plainOf("service") shouldEqual Some("svc")
+      event.valueOf("service") shouldEqual event.jsonOf("service")
+      event.plainOf("n") shouldEqual Some("3")
+      event.plainOf("missing") shouldEqual None
+
     "normalize keys the way the backends do" in:
       val log                 = RecordingLogging[Identity]()
       given Logging[Identity] = log

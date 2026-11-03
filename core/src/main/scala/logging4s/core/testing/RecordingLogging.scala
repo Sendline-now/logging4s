@@ -16,8 +16,13 @@ final case class RecordedEvent(
 ):
   def keys: Seq[String] = fields.map(_.key.value)
 
-  def valueOf(key: String): Option[String] =
-    fields.find(_.key.value == key).map(_.json.value)
+  def jsonOf(key: String): Option[String] = field(key).map(_.json.value)
+
+  def plainOf(key: String): Option[String] = field(key).map(_.plain.value)
+
+  def valueOf(key: String): Option[String] = jsonOf(key)
+
+  private def field(key: String): Option[LoggableValue] = fields.find(_.key.value == key)
 
 final class RecordingLogging[F[*]: Delay] private (
     context: Seq[LoggableValue],
