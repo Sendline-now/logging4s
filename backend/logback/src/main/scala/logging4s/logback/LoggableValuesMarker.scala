@@ -6,7 +6,15 @@ import net.logstash.logback.marker.LogstashMarker
 import logging4s.core.LoggableValue
 
 private[logback] final class LoggableValuesMarker(val values: Seq[LoggableValue]) extends LogstashMarker(LoggableValuesMarker.Name):
-  override def writeTo(generator: JsonGenerator): Unit = ()
+
+  override def writeTo(generator: JsonGenerator): Unit =
+    values.foreach { value =>
+      generator.writeName(value.key.value)
+      generator.writeRawValue(value.json.value)
+    }
+
+  override protected def toStringSelf(): String =
+    values.iterator.map(value => s"${value.key.value}=${value.json.value}").mkString(", ")
 
 private[logback] object LoggableValuesMarker:
   private val Name = "logging4s.values"

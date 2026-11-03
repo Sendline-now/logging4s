@@ -39,7 +39,7 @@ private[logback] class LoggingLogbackImpl[F[*]: Delay](
           val text   = LogMessage.render(message, cause, record.values)
 
           if record.structured.isEmpty then write(level, text, cause)
-          else write(level, MarkerHelper.fromLoggable(record.structured), text, cause)
+          else write(level, LoggableValuesMarker(record.structured), text, cause)
       }
 
   override def unit: F[Unit] = Delay[F].unit
