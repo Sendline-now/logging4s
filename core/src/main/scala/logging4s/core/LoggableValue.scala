@@ -43,9 +43,12 @@ object LoggableValue:
 
   given [T, C[*]] => (L: Loggable[C[T]]) => Conversion[C[T], LoggableValue] = v => deferred(L.key, v, L)
 
+  private val LinearScanLimit = 8
+
   private def collides(values: Seq[LoggableValue], reserved: Set[ValueKey]): Boolean =
     if values.isEmpty then false
     else if values.sizeIs == 1 then reserved.contains(values.head.key)
+    else if values.sizeIs <= LinearScanLimit then values.exists(value => reserved.contains(value.key) || values.count(_.key == value.key) > 1)
     else
       val seen = scala.collection.mutable.HashSet.empty[ValueKey]
       values.exists(value => reserved.contains(value.key) || !seen.add(value.key))
@@ -99,8 +102,13 @@ object LoggableValue:
     if earlier.isEmpty then later
     else if later.isEmpty then earlier
     else
-      val overridden = later.iterator.map(_.key).toSet
-      earlier.filterNot(value => overridden.contains(value.key)) ++ later
+      val overridden: ValueKey => Boolean =
+        if later.sizeIs <= LinearScanLimit then key => later.exists(_.key == key)
+        else later.iterator.map(_.key).toSet
+
+      val kept = if earlier.exists(value => overridden(value.key)) then earlier.filterNot(value => overridden(value.key)) else earlier
+
+      kept ++ later
 
   def keepLastByKey(values: Seq[LoggableValue]): Seq[LoggableValue] =
     if values.sizeIs <= 1 then values

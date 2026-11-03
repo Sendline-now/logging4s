@@ -5,6 +5,8 @@ import org.scalatest.matchers.should.Matchers
 
 class LoggableValueSpec extends AnyWordSpec, Matchers:
 
+  import LoggableValueSpec.*
+
   "LoggableValue.deduplicateKeys" must:
     "keep unique keys untouched and in order" in:
       val values = Seq(
@@ -49,3 +51,34 @@ class LoggableValueSpec extends AnyWordSpec, Matchers:
 
       keys.distinct.size shouldEqual keys.size
       keys should contain(ValueKey("x_2"))
+
+    "find a duplicate in a long list as well, where the keys are hashed rather than scanned" in:
+      val values = numbered(1 to 10, "a") ++ numbered(3 to 3, "b")
+
+      LoggableValue.deduplicateKeys(values).map(_.key) shouldEqual (1 to 10).map(i => s"k$i") :+ "k3_2"
+
+    "keep a long list of unique keys untouched" in:
+      val values = numbered(1 to 12, "a")
+
+      LoggableValue.deduplicateKeys(values) shouldBe theSameInstanceAs(values)
+
+  "LoggableValue.mergeByKey" must:
+    "let later values replace earlier ones with the same key, short or long, keeping the survivors first" in:
+      Seq(1 to 3, 1 to 12).foreach { keys =>
+        val merged = LoggableValue.mergeByKey(numbered(0 to keys.last, "old"), numbered(keys, "new"))
+
+        merged.map(value => (value.key, value.plain)) shouldEqual ("k0", "old") +: keys.map(i => (s"k$i", "new"))
+      }
+
+    "append the later values when none of them overrides an earlier one" in:
+      Seq(1 to 3, 1 to 12).foreach { keys =>
+        val earlier = numbered(Range(100, 102), "old")
+        val later   = numbered(keys, "new")
+
+        LoggableValue.mergeByKey(earlier, later) shouldEqual earlier ++ later
+      }
+
+object LoggableValueSpec:
+
+  def numbered(keys: Range, label: String): Seq[LoggableValue] =
+    keys.map(i => LoggableValue(ValueKey(s"k$i"), PlainString(label), JsonString.quoted(label)))
