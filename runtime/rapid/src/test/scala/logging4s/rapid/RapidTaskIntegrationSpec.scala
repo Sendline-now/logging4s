@@ -17,6 +17,20 @@ class RapidTaskIntegrationSpec extends AsyncWordSpec, AsyncTaskSpec, Matchers:
       val expected = "test_value"
       Delay[Task].delay(expected).map(_ shouldEqual expected)
 
+    "not run the thunk until the task runs" in:
+      var evaluations = 0
+
+      val task = Delay[Task].delay {
+        evaluations += 1
+        evaluations
+      }
+
+      evaluations shouldEqual 0
+      task.map(result => (result, evaluations) shouldEqual (1, 1))
+
+    "give a unit that completes with ()" in:
+      Delay[Task].unit.map(_ shouldEqual ())
+
     "right create logging instance for IO monad" in:
       for _ <- Logging.create[Task]("test")
       yield assert(true)
