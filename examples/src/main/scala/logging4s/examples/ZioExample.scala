@@ -25,5 +25,5 @@ object ZioExample extends ZIOAppDefault:
       daenerys <- createUser("Daenerys Targaryen", 22)
       _        <- logging.info("User created", daenerys)
 
-      _ <- logging.info("All users created", Seq.empty[User])
+      _ <- logging.info("All users created", Seq(johnShow, daenerys))
     yield ()
