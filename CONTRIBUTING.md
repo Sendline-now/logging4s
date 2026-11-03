@@ -43,7 +43,7 @@ sbt "logback/testOnly logging4s.logback.Logging4sEncoderSpec"
 | `backend/console` | standalone stdout/stderr `LoggingFactory` — no third-party logging framework underneath |
 | `runtime/cats`, `runtime/zio`, `runtime/kyo`, `runtime/rapid` | `given Delay[F]` per effect runtime |
 | `json/circe`, `json/jsoniter`, `json/play`, `json/spray`, `json/json4s`, `json/argonaut`, `json/borer`, `json/upickle`, `json/weepickle`, `json/fabric`, `json/zio` | `given JsonEncoder[A]` bridged from each library's own codec typeclass |
-| `examples` | runnable end-to-end examples, one per backend/runtime combination |
+| `examples` | runnable end-to-end examples on logback and console, with cats-effect and ZIO; CI runs each one and checks a line of its output |
 | `benchmarks` | JMH benchmarks comparing derivation paths and backend encoders (see the README's Benchmarks section) |
 
 ## Adding a new backend
@@ -95,6 +95,11 @@ built from whatever encoding typeclass the target library already exposes — se
 Formatting is enforced by [scalafmt](https://scalameta.org/scalafmt/) (`.scalafmt.conf`) and checked in
 CI. Run `sbt scalafmtAll` before opening a PR. No comments in Scala source unless the *why* is genuinely
 non-obvious — well-named identifiers should carry the *what*.
+
+## Documentation
+
+`README.md` is the primary documentation. The site (`docs/index.html`) is a shorter rendering of it: change the README
+first, then carry the change over to the site, so the two never describe different behaviour.
 
 ## Opening a pull request
 

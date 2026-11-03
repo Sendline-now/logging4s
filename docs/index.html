@@ -157,8 +157,12 @@ object Main extends IOApp.Simple:
       log <- Logging.create[IO]("Main")
       _   <- log.info("user created", User(1, "John"))
     yield ()</code></pre>
-  <p>The <code>logback</code> backend attaches <code>User</code> as a nested JSON object; the message keeps its plain rendering:</p>
-  <pre><code>{"message":"user created: user -> (id -> (1), name -> (John))","user":{"id":1,"name":"John"},"source":"Main.scala:12","level":"INFO"}</code></pre>
+  <p>
+    The <code>logback</code> backend attaches <code>User</code> as a nested JSON object; the message keeps its plain
+    rendering (abridged — <code>LogstashEncoder</code> also writes <code>@timestamp</code>, <code>logger_name</code>,
+    <code>thread_name</code> and the rest of its envelope):
+  </p>
+  <pre><code>{"message":"user created: user -> (id -> (1), name -> (John))","user":{"id":1,"name":"John"},"source":"Main.scala:13","level":"INFO"}</code></pre>
 
   <h2 id="loggable">The <code>Loggable</code> type class</h2>
   <p>Everything centers on one type class. A <code>Loggable[A]</code> is required for any value you log:</p>
@@ -179,16 +183,25 @@ Loggable.deriving[User]       // key "user"     Loggable.deriving[User]("account
   <h3>Derivation</h3>
   <p>
     <code>derives Loggable</code> builds both renderings structurally from the fields — the JSON object is assembled by
-    the macro, no JSON library involved. Products key by field name; sum types delegate to the selected variant.
+    the macro, no JSON library involved. Products key by field name, and a case class without fields renders as
+    <code>{}</code>; sum types delegate to the selected variant, and a <code>case object</code> or parameterless enum
+    case renders as its name.
   </p>
   <pre><code>final case class Point(x: Int, y: Int) derives Loggable
 
 enum Color derives Loggable:
   case Red, Green, Blue</code></pre>
   <p>
-    Recursive types derive too — trees, ASTs, mutually recursive products and recursive enums. With
-    <code>sumTypeDiscriminator = Some("type")</code> every variant leads with its name —
-    <code>{"type":"Card","last4":"4242"}</code> — so a log query can tell the variants apart.
+    Recursive types derive too — trees, ASTs, mutually recursive products and recursive enums — and so do generic
+    ones: <code>case class Box[A](value: A) derives Loggable</code> covers every <code>A</code> that has a
+    <code>Loggable</code>. With <code>sumTypeDiscriminator = Some("type")</code> every variant leads with its name —
+    <code>{"type":"Card","last4":"4242"}</code>, and <code>{"type":"Pending"}</code> for a case without fields — so a
+    log query can tell the variants apart.
+  </p>
+  <p class="muted">
+    Derivation reads the first parameter list only — a case class with a second one has no <code>Mirror</code> and
+    does not derive — and renders every field in it, <code>private val</code>s included, as <code>toString</code>
+    does; hide one with a per-field policy.
   </p>
 
   <h3>Named tuples</h3>
@@ -202,9 +215,10 @@ enum Color derives Loggable:
   <h3>From an existing codec</h3>
   <p>
     If you already have a JSON codec for <code>A</code>, <code>Loggable.fromEncoders</code> delegates <code>json</code>
-    to it — the log JSON is exactly your codec's output (its field names, its escaping), and <code>plain</code> comes
-    from a <code>PlainEncoder</code> (e.g. bridged from <code>cats.Show</code>) or a structural fallback. Prefer this
-    when a codec exists.
+    to it — the log JSON is exactly your codec's output (its field names, its escaping). <code>plain</code> comes from
+    a <code>PlainEncoder</code> (e.g. bridged from <code>cats.Show</code>) when one is in scope; without one it is
+    derived structurally if every field has a <code>Loggable</code>, and otherwise it is the codec's JSON — so the
+    codec alone is always enough. Prefer this when a codec exists.
   </p>
   <pre><code>given io.circe.Encoder[User] = io.circe.generic.semiauto.deriveEncoder
 given Loggable[User]         = Loggable.fromEncoders</code></pre>
@@ -222,7 +236,8 @@ val secret             = Loggable[String].redacted()   // always renders "***"</
   <h3>Per-field policies</h3>
   <p>
     For derived products, override individual fields with a builder. Selectors are macro-checked field references — not
-    strings, not annotations — so they survive refactors and work on types you don't own:
+    strings, not annotations — so they survive refactors and work on types you don't own. A nested path, a method call
+    or a member that is not a constructor field is a compile error, so a policy never silently applies to nothing:
   </p>
   <pre><code>given Loggable[Account] =
   Loggable.deriving[Account]
@@ -249,14 +264,28 @@ val secret             = Loggable[String].redacted()   // always renders "***"</
   _   <- scoped.info("handled")                         // context attached to every line
 yield ()</code></pre>
   <p>
-    An interpolator is available for terser call sites — import <code>logging4s.core.syntax.logging.*</code>, have a
-    <code>given Logging[F]</code> in scope, and the key is taken from the interpolated identifier:
+    Any value whose type has a <code>Loggable</code> is passed as it is — <code>user</code>, <code>List(1, 2)</code>,
+    <code>Some(order)</code> — and converts under the key of its <code>Loggable</code>, with no
+    <code>implicitConversions</code> import (<code>LoggableValue</code> is an <code>into</code> target);
+    <code>asLogValue("key")</code> picks the key yourself.
+  </p>
+  <p>
+    An interpolator is available for terser call sites — import <code>logging4s.core.syntax.logging.*</code> and have a
+    <code>given Logging[F]</code> in scope:
   </p>
   <pre><code>info"order placed: $order"   // == log.info("order placed", order.asLogValue("order"))</code></pre>
+  <table>
+    <tr><th>Hole</th><th>Key</th></tr>
+    <tr><td>an identifier, <code>$order</code></td><td><code>order</code></td></tr>
+    <tr><td>a selection rooted in one, <code>${user.id}</code>, <code>${items.size}</code></td><td>the path joined, <code>user_id</code>, <code>items_size</code></td></tr>
+    <tr><td>a service selector, <code>${maybe.get}</code>, <code>${xs.head}</code>, <code>${pair._1}</code></td><td>the value's <code>Loggable</code> key</td></tr>
+    <tr><td>any other expression, <code>${compute()}</code></td><td>the value's <code>Loggable</code> key</td></tr>
+  </table>
   <p>
-    Values render lazily and the interpolator checks the level first, so a <code>debug"…"</code> under a logger set to
-    <code>INFO</code> evaluates neither the interpolated expressions nor their JSON. Every record also carries the call
-    site as a <code>source</code> field.
+    Values render lazily and every log call checks the level first, so a <code>debug</code> under a logger set to
+    <code>INFO</code> evaluates neither its values (nor an interpolator's expressions) nor their JSON. Every record also
+    carries the call site as a <code>source</code> field — the file name and line, <code>OrderService.scala:42</code>,
+    without the directory or package.
   </p>
   <p>
     The message must stay static text — it is the aggregation key. <code>log.info(s"user $id created")</code> is a
@@ -280,6 +309,12 @@ info"user created $id"</code></pre>
     runtime there is <code>log.log(level, "message", values*)</code>. Control characters inside values are escaped in
     the message text, so a value can never forge a second line in a plain-text log.
   </p>
+  <p>
+    A <code>Loggable</code> that throws never costs you the record: the value renders as
+    <code>[failed to render: java.lang.IllegalStateException: …]</code> in both forms, the rest of the record is
+    written, and the logging effect succeeds — the contract SLF4J and log4j2 keep for a parameter whose
+    <code>toString</code> throws.
+  </p>
 
   <h3>Fiber-local context</h3>
   <p>
@@ -294,17 +329,32 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
   handle(request)                                                // every record inside carries request_id
 }</code></pre>
   <table>
-    <tr><th>Runtime</th><th>Storage</th><th>Scope an effect with</th></tr>
-    <tr><td>cats-effect</td><td><code>IOLocal</code></td><td><code>IOLocalContext.make</code> gives a <code>LocalContext[IO]</code>; <code>local.scoped(values*)(io)</code></td></tr>
-    <tr><td>ZIO</td><td>one global <code>FiberRef</code></td><td><code>ZioLoggingContext.scoped(values*)(zio)</code>; <code>given LocalContext[Task]</code> / <code>[UIO]</code></td></tr>
-    <tr><td>Kyo</td><td>one global <code>Local</code></td><td><code>KyoLoggingContext.scoped(values*)(v)</code> for any <code>A &lt; S</code>; <code>given LocalContext[KIO]</code></td></tr>
+    <tr><th>Runtime</th><th>Storage</th><th><code>LocalContext</code> for</th><th>Scope an effect with</th></tr>
+    <tr><td>cats-effect</td><td><code>IOLocal</code></td><td><code>IO</code>: <code>IOLocalContext.make</code>; any <code>F</code> with <code>LiftIO</code> and <code>MonadCancelThrow</code>, such as <code>Kleisli[IO, R, *]</code>: <code>IOLocalContext.lifted[F]</code>, or <code>lift[F](local)</code> over an <code>IOLocal</code> you share</td><td><code>local.scoped(values*)(fa)</code></td></tr>
+    <tr><td>ZIO</td><td>one global <code>FiberRef</code></td><td>any <code>ZIO[R, E, *]</code>, as a <code>given</code></td><td><code>ZioLoggingContext.scoped(values*)(zio)</code></td></tr>
+    <tr><td>Kyo</td><td>one global <code>Local</code></td><td>any <code>A &lt; S</code>, as a <code>given</code></td><td><code>KyoLoggingContext.scoped(values*)(v)</code></td></tr>
   </table>
   <p class="muted">
     A call-site value wins over the ambient context, which wins over the logger's own <code>withContext</code>. Nested
-    scopes add up, the previous context comes back when a scope ends, and a disabled level never reads the fiber-local.
+    scopes add up — an inner scope that sets a key again overrides it until it ends — the previous context comes back
+    when a scope ends, however it ends (failure, cancellation and interruption included), and a disabled level never
+    reads the fiber-local.
     The runnable <a href="https://github.com/logging4s/logging4s/blob/main/examples/src/main/scala/logging4s/examples/ContextualLoggingExample.scala"><code>ContextualLoggingExample</code></a>
     runs two requests in parallel, each keeping its own <code>request_id</code>.
   </p>
+
+  <h3>Testing</h3>
+  <p>
+    <code>Logging.noop[F]</code> discards everything. <code>logging4s.core.testing.RecordingLogging[F]</code> captures
+    each record the way a backend would emit it — context merged, keys normalized and deduplicated — so a test can
+    assert on it without a logging framework:
+  </p>
+  <pre><code>val log = RecordingLogging[Try]()
+service(log)
+
+log.recorded.map(_.message) shouldEqual Seq("user created")
+log.recorded.head.plainOf("user_name") shouldEqual Some("John")
+log.recorded.head.jsonOf("user_name") shouldEqual Some("\"John\"")   // valueOf is this JSON form too</code></pre>
 
   <h2 id="backends">Backends</h2>
   <p>
@@ -313,7 +363,7 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
   </p>
   <table>
     <tr><th>Backend</th><th>How structured values are emitted</th><th>Nested JSON?</th></tr>
-    <tr><td><code>logback</code></td><td>logstash raw-JSON markers</td><td><strong>Yes</strong> — genuine nested objects/arrays</td></tr>
+    <tr><td><code>logback</code></td><td>one logstash marker per record that writes each value as raw JSON</td><td><strong>Yes</strong> — genuine nested objects/arrays</td></tr>
     <tr><td><code>log4j2</code></td><td>a <code>MapMessage</code> argument (no MDC)</td><td><strong>Yes</strong> with <code>JsonTemplateLayout</code> in object mode</td></tr>
     <tr><td><code>slf4j</code></td><td>slf4j 2.x fluent <code>addKeyValue</code></td><td>Provider-dependent; typically strings</td></tr>
     <tr><td><code>console</code></td><td>writes the JSON itself to stdout/stderr</td><td><strong>Yes</strong> — no framework needed</td></tr>
@@ -331,12 +381,23 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
   "data": {"$resolver": "message"}
 }</code></pre>
   <p>
+    Under <code>logback</code> a value's JSON is rendered only when an encoder writes it, so an appender that prints
+    text alone never pays for it, and <code>%marker</code> in a pattern shows the values as <code>key=json</code> pairs.
+    Under <code>slf4j</code> a value named after an envelope field (<code>level</code>, <code>message</code>, …) is
+    suffixed (<code>level_2</code>), as on every other backend.
+  </p>
+  <p>
     We never touch your <code>logback.xml</code> / <code>log4j2.xml</code>: values are only attached to the event and
     your encoder/layout decides what to render. <code>logging4s-logback</code> also ships an opt-in
     <code>Logging4sEncoder</code> that writes the JSON itself (no logstash round-trip, no Jackson). It also carries the
-    MDC and slf4j key-value pairs, and never writes a key twice:
+    MDC and slf4j key-value pairs — one without a value as <code>null</code> — and never writes a key twice. Its
+    envelope field names and what it includes are set from the same XML:
   </p>
-  <pre><code>&lt;encoder class="logging4s.logback.Logging4sEncoder"/&gt;</code></pre>
+  <pre><code>&lt;encoder class="logging4s.logback.Logging4sEncoder"&gt;
+  &lt;timestampField&gt;time&lt;/timestampField&gt;   &lt;!-- also levelField, loggerField, threadField, messageField, stackTraceField --&gt;
+  &lt;messageField&gt;msg&lt;/messageField&gt;
+  &lt;includeThread&gt;false&lt;/includeThread&gt;      &lt;!-- also includeMdc, includeKeyValuePairs; all true by default --&gt;
+&lt;/encoder&gt;</code></pre>
   <p>
     <code>logging4s-console</code> needs no logging framework at all — structured JSON (or colored plain) straight to
     stdout, ideal for containers. It's configured via HOCON under <code>logging4s.console</code>
@@ -354,6 +415,13 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
     "io.grpc"  = "off"   # silenced entirely
   }
 }</code></pre>
+  <p class="muted">
+    <code>auto</code> asks whether the process has a terminal, not the configured stream — with <code>stderr</code>
+    redirected to a file while stdout stays on a terminal, set <code>color = "off"</code>. A logger's threshold is
+    resolved once, when it is created, and the default configuration is read once per process; to change levels while
+    running, create loggers under a new <code>given ConsoleConfig</code>. An unrecognised value
+    (<code>level = "warning"</code>) makes creating the first console logger throw, naming the setting.
+  </p>
 
   <h2 id="config">Configuration</h2>
   <p>
@@ -367,16 +435,33 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
     <tr><td><code>keyNameStyle</code></td><td><code>SnakeCase</code></td><td>applied to every key: AsIs / Snake / Kebab / Camel / Pascal</td></tr>
     <tr><td><code>plainTupleStyle</code></td><td><code>AsScala</code></td><td>tuple plain form: <code>(1, a)</code> / <code>[1, a]</code> / <code>1, a</code> / <code>{1, a}</code></td></tr>
     <tr><td><code>plainValuesStyle</code></td><td><code>Arrow</code></td><td>value join: <code>k -> (v)</code> / <code>k=v</code> / <code>k: v</code> / <code>{k=v}</code></td></tr>
-    <tr><td><code>includeSourcePosition</code></td><td><code>true</code></td><td>attach the call site as a <code>source</code> field (<code>"OrderService.scala:42"</code>)</td></tr>
-    <tr><td><code>includeValuesInMessage</code></td><td><code>true</code></td><td>append the values to the message text; <code>false</code> keeps the message as bare static text and renders only the structured form</td></tr>
-    <tr><td><code>omitAbsentValues</code></td><td><code>false</code></td><td><code>true</code> drops <code>None</code> instead of rendering <code>null</code>, at the top level and inside derived products</td></tr>
+    <tr><td><code>includeSourcePosition</code></td><td><code>true</code></td><td>attach the call site as a <code>source</code> field (<code>"OrderService.scala:42"</code>, the file name only)</td></tr>
+    <tr><td><code>includeValuesInMessage</code></td><td><code>true</code></td><td>append the values to the message text; <code>false</code> keeps the message as bare static text and renders only the structured form — each value is then rendered once rather than twice</td></tr>
+    <tr><td><code>omitAbsentValues</code></td><td><code>false</code></td><td><code>true</code> drops an absent value (<code>None</code>, <code>Unit</code>, kyo <code>Absent</code>) instead of rendering <code>null</code>, at the top level and inside derived products</td></tr>
     <tr><td><code>sumTypeDiscriminator</code></td><td><code>None</code></td><td><code>Some("type")</code> makes a derived sum type's JSON lead with the variant name</td></tr>
   </table>
+  <p>
+    Default keys: scalars key by type name (<code>Loggable[Int]</code> → <code>int</code>, <code>UUID</code> →
+    <code>uuid</code>), and a derived case class by its decapitalized name. The standard library types key by what they
+    are:
+  </p>
+  <table>
+    <tr><th>Types</th><th>Key</th></tr>
+    <tr><td><code>Instant</code>, <code>java.util.Date</code>, <code>LocalTime</code> and the date-time types</td><td><code>time</code></td></tr>
+    <tr><td><code>LocalDate</code></td><td><code>date</code></td></tr>
+    <tr><td><code>Year</code>, <code>YearMonth</code>, <code>MonthDay</code>, <code>Month</code>, <code>DayOfWeek</code>, <code>Period</code></td><td><code>year</code>, <code>year_month</code>, <code>month_day</code>, <code>month</code>, <code>day_of_week</code>, <code>period</code></td></tr>
+    <tr><td><code>ZoneId</code>, <code>ZoneOffset</code></td><td><code>zone</code></td></tr>
+    <tr><td><code>java.time.Duration</code>, <code>FiniteDuration</code>, <code>Duration</code></td><td><code>time_ms</code> — an infinite or undefined <code>Duration</code> renders <code>null</code></td></tr>
+    <tr><td><code>URI</code>, <code>URL</code>, <code>InetAddress</code>, <code>Path</code>, <code>Locale</code>, <code>Currency</code></td><td><code>uri</code>, <code>url</code>, <code>ip</code>, <code>path</code>, <code>locale</code>, <code>currency</code></td></tr>
+    <tr><td><code>Throwable</code></td><td><code>error</code> — <code>{"class":…,"message":…}</code>, with its <code>cause</code> chain nested up to five deep</td></tr>
+    <tr><td><code>Try[A]</code></td><td><code>error_&lt;key of A&gt;</code> — the value, or the failure as a <code>Throwable</code></td></tr>
+  </table>
   <p class="muted">
-    Default keys: scalars key by type name (<code>Loggable[Int]</code> → <code>int</code>), date/time use
-    <code>time</code> (<code>LocalDate</code> → <code>date</code>), <code>FiniteDuration</code> and
-    <code>java.time.Duration</code> use <code>time_ms</code>, <code>Throwable</code> uses <code>error</code>, collections pluralize
-    (<code>List[Int]</code> → <code>ints</code>), a derived case class keys by its decapitalized name.
+    Collections append a naive English plural (<code>List[Int]</code> → <code>ints</code>, <code>child</code> →
+    <code>childs</code>), so set a key where it reads badly. Two values of one type share a key — two timestamps come out
+    as <code>time</code> and <code>time_2</code>; give them names. A <code>Map[String, String]</code> keys as
+    <code>strings</code>, like a <code>List[String]</code>, and a search index that maps one field to both an object and
+    an array rejects the second — give a <code>Map</code> its own key.
   </p>
 
   <h2 id="modules">Modules</h2>
@@ -398,7 +483,7 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
     <tr><td><code>logging4s-zio-json</code></td><td>3.9 LTS</td><td>zio-json JsonEncoder</td></tr>
     <tr><td><code>logging4s-play-json</code></td><td>3.9 LTS</td><td>play-json Writes</td></tr>
     <tr><td><code>logging4s-spray-json</code></td><td>3.9 LTS</td><td>spray-json JsonWriter</td></tr>
-    <tr><td><code>logging4s-json4s</code></td><td>3.9 LTS</td><td>json4s Formats</td></tr>
+    <tr><td><code>logging4s-json4s</code></td><td>3.9 LTS</td><td>json4s Formats; encodes by reflection, so a type it cannot open (a JDK type such as <code>Instant</code>) fails when rendered, not when compiled</td></tr>
     <tr><td><code>logging4s-argonaut</code></td><td>3.9 LTS</td><td>argonaut EncodeJson</td></tr>
     <tr><td><code>logging4s-borer</code></td><td>3.9 LTS</td><td>borer Encoder</td></tr>
     <tr><td><code>logging4s-upickle</code></td><td>3.9 LTS</td><td>upickle Writer</td></tr>
@@ -413,8 +498,8 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
   <h3>Compatibility</h3>
   <p>
     Every module is built on the <code>3.9 LTS</code> release. <code>Scala 3</code> TASTy is backward but not forward
-    compatible, so <strong>4.x cannot be consumed from a <code>3.3 LTS</code> project</strong> — <code>3.0.x</code> is
-    the line to stay on until your application moves to <code>3.9</code>.
+    compatible, so <strong>no release from 4.0 on can be consumed from a <code>3.3 LTS</code> project</strong> —
+    <code>3.0.x</code> is the line to stay on until your application moves to <code>3.9</code>.
   </p>
   <p>
     In exchange, the split that 3.x had is gone: <code>logging4s-kyo</code> and <code>logging4s-rapid</code> used to be
@@ -440,23 +525,26 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
   <p>
     A JMH harness logs the same mid-size event through every backend into a discarding sink. Every row is logging4s
     itself on a different backend/encoder — this compares <em>our own backend choices against each other</em>, not
-    logging4s against other logging libraries. Measured as <strong>throughput — operations per second, higher is
-    better</strong> (single fork, one machine — rough ballpark, run it on your own hardware):
+    logging4s against other logging libraries. Measured on 6.1 as <strong>throughput — operations per second, higher is
+    better</strong> — and as the bytes allocated per record, with 6.0 alongside (single fork, one machine — rough
+    ballpark, run it on your own hardware):
   </p>
   <table>
-    <tr><th>Config</th><th class="num">ops/s</th></tr>
-    <tr><td><code>log4j2</code> + JsonTemplateLayout (nested)</td><td class="num">~330k</td></tr>
-    <tr><td><code>log4j2</code> (stringified)</td><td class="num">~210k</td></tr>
-    <tr><td><code>console</code> + fromEncoders (jsoniter)</td><td class="num">~200k</td></tr>
-    <tr><td><code>logback</code> + Logging4sEncoder</td><td class="num">~170k</td></tr>
-    <tr><td><code>logback</code> + LogstashEncoder</td><td class="num">~140k</td></tr>
-    <tr><td><code>console</code> + derives</td><td class="num">~120k</td></tr>
+    <tr><th>Config</th><th class="num">ops/s</th><th class="num">bytes per record</th><th class="num">on 6.0</th></tr>
+    <tr><td><code>log4j2</code> + JsonTemplateLayout (nested)</td><td class="num">~705k</td><td class="num">~4.2 KB</td><td class="num">~7.6 KB</td></tr>
+    <tr><td><code>console</code> + fromEncoders (jsoniter)</td><td class="num">~663k</td><td class="num">~4.3 KB</td><td class="num">~8.6 KB</td></tr>
+    <tr><td><code>logback</code> + Logging4sEncoder</td><td class="num">~643k</td><td class="num">~5.3 KB</td><td class="num">~10.3 KB</td></tr>
+    <tr><td><code>console</code> + derives</td><td class="num">~606k</td><td class="num">~6.0 KB</td><td class="num">~11.0 KB</td></tr>
+    <tr><td><code>log4j2</code> (stringified)</td><td class="num">~510k</td><td class="num">~3.7 KB</td><td class="num">~6.1 KB</td></tr>
+    <tr><td><code>logback</code> + LogstashEncoder</td><td class="num">~494k</td><td class="num">~3.9 KB</td><td class="num">~6.2 KB</td></tr>
   </table>
   <p class="muted">
-    Rough numbers — single fork on a loaded laptop, wide error bars, read them as orders of magnitude. The encoding path
-    matters as much as the backend: on the same <code>console</code>, <code>fromEncoders</code> with a codec is ~1.7× the
-    throughput of <code>derives</code>. The opt-in <code>Logging4sEncoder</code> edges past the standard
-    <code>LogstashEncoder</code> — it builds the JSON in one pass with no Jackson round-trip.
+    Throughput is rough — error bars of ±5–7% within a run and wider swings between runs, so read it as orders of
+    magnitude. The bytes per record are stable to the byte, and 6.1 allocates 38–49% fewer than 6.0 on every
+    configuration. The encoding path matters as much as the backend: on the same <code>console</code>,
+    <code>fromEncoders</code> with a codec allocates ~28% less than <code>derives</code>. The opt-in
+    <code>Logging4sEncoder</code> runs ~1.3× the standard <code>LogstashEncoder</code> — it builds the JSON in one pass
+    with no Jackson round-trip — though it allocates more, building the line as a <code>String</code> first.
   </p>
 
 
@@ -466,21 +554,69 @@ ZioLoggingContext.scoped(requestId.asLogValue("request_id")) {  // any ZIO[R, E,
     <code>INFO</code>:
   </p>
   <table>
-    <tr><th>Call shape</th><th class="num">ops/s</th></tr>
-    <tr><td>interpolator, level off</td><td class="num">~791M</td></tr>
-    <tr><td>direct call, lazy value, level off</td><td class="num">~387M</td></tr>
-    <tr><td>direct call, pre-rendered value, level off (2.x behaviour)</td><td class="num">~1.5M</td></tr>
-    <tr><td>interpolator, level on</td><td class="num">~409k</td></tr>
-    <tr><td>direct call, level on</td><td class="num">~406k</td></tr>
+    <tr><th>Call shape</th><th class="num">ops/s on 6.1</th><th class="num">on 6.0</th></tr>
+    <tr><td>interpolator, level off</td><td class="num">~779M</td><td class="num">~791M</td></tr>
+    <tr><td>direct call, lazy value, level off</td><td class="num">~793M</td><td class="num">~387M</td></tr>
+    <tr><td>direct call, pre-rendered value, level off (2.x behaviour)</td><td class="num">~757M</td><td class="num">~1.5M</td></tr>
+    <tr><td>interpolator, level on</td><td class="num">~444k</td><td class="num">~409k</td></tr>
+    <tr><td>direct call, level on</td><td class="num">~476k</td><td class="num">~406k</td></tr>
   </table>
   <p class="muted">
     In 2.x a suppressed <code>debug</code> still rendered every value to JSON at the call site, so it cost roughly a
-    quarter of an actual log write. In 3.0 values render lazily (~250× cheaper) and the interpolator additionally skips
-    the call when the level is off (another ~2×). With the level on, the guard costs nothing measurable. The two
+    quarter of an actual log write. 3.0 made values render lazily (~250× cheaper), and the interpolator skipped the call
+    when the level was off. Since 6.1 every call does — a direct call checks the level before it evaluates its
+    arguments, so the three suppressed shapes cost the same. With the level on, the guard costs nothing measurable. The
     disabled rows are JIT-optimistic in absolute terms — with nothing escaping, escape analysis removes the wrapper
     allocations outright — so read the orders of magnitude, not the nanoseconds.
   </p>
   <h2 id="migration">Migration</h2>
+  <h3>From 6.0 to 6.1</h3>
+  <p>
+    6.1 is binary compatible with 6.0 — MiMa checks every module against it — and call sites compile unchanged, with
+    one deliberate exception (the builder, below). What moves is output, where 6.0 rendered a value in the wrong shape,
+    under a key that did not say what it was, or not at all.
+  </p>
+  <pre><code>- "org.logging4s" %% "logging4s-cats" % "6.0.0"
++ "org.logging4s" %% "logging4s-cats" % "6.1.0"</code></pre>
+  <ul>
+    <li><strong><code>Some(x)</code> renders as <code>x</code></strong> — through <code>asLogValue</code> or the
+      interpolator it came out as a one-element array under the plural key (<code>"ints":[1]</code>); it is now
+      <code>"int":1</code>. <code>List</code> and <code>Vector</code> passed directly now compile.</li>
+    <li><strong>An interpolated selection keys by its path</strong> — <code>${user.id}</code> logged under
+      <code>id</code> and is now <code>user_id</code>; service selectors (<code>.get</code>, <code>.head</code>,
+      <code>._1</code>) keep the value's key.</li>
+    <li><strong>A case class without fields renders as <code>{}</code></strong>, a <code>case object</code> keeps its
+      name, and under <code>sumTypeDiscriminator</code> a variant without fields is <code>{"type":"Pending"}</code>.</li>
+    <li><strong>A <code>Throwable</code> value nests its cause chain</strong>, five deep and cycle-safe; the console
+      describes the cause in the message, as every other backend already did.</li>
+    <li><strong>Direct calls check the level before evaluating their arguments</strong> —
+      <code>log.debug("x", expensive())</code> under <code>INFO</code> no longer calls <code>expensive()</code>.</li>
+    <li><strong>A <code>Loggable</code> that throws renders a placeholder</strong> instead of failing the effect or, with
+      logback, losing the line.</li>
+    <li><strong>The builder rejects a selector that is not a constructor field</strong> —
+      <code>.hide(_.someDef)</code> compiled and hid nothing; it is now a compile error.</li>
+    <li><strong>Smaller output fixes</strong> — creation-context keys that normalize to one name collapse;
+      <code>slf4j</code> suffixes envelope names; <code>Unit</code> counts as absent; <code>Logging4sEncoder</code>
+      writes a <code>null</code> MDC entry or key-value pair as <code>null</code> (6.0 lost the whole line on a
+      <code>null</code> MDC value).</li>
+  </ul>
+  <p>New in 6.1:</p>
+  <ul>
+    <li><strong>No <code>implicitConversions</code> import</strong> — <code>LoggableValue</code> is an
+      <code>into</code> target.</li>
+    <li><strong>Fiber-local context for more effects</strong> — <code>IOLocalContext.lifted[F]</code> /
+      <code>lift[F](local)</code>, and <code>LocalContext</code> for every <code>ZIO[R, E, *]</code> and kyo
+      <code>A &lt; S</code>.</li>
+    <li><strong>More standard instances</strong> — <code>java.time</code> calendar types, <code>ZoneId</code>,
+      <code>Date</code>, <code>Duration</code>, <code>URI</code>, <code>URL</code>, <code>InetAddress</code>,
+      <code>Path</code>, <code>Locale</code>, <code>Currency</code>, <code>Try</code>.</li>
+    <li><strong><code>fromEncoders</code> always compiles</strong> with a codec.</li>
+    <li><strong><code>Logging4sEncoder</code> is configurable</strong> from <code>logback.xml</code>.</li>
+    <li><strong><code>RecordedEvent.jsonOf</code> / <code>plainOf</code></strong> and <strong><code>Logging.emitWith</code></strong>
+      for backends.</li>
+    <li><strong>38–49% fewer bytes per record</strong> on every backend.</li>
+  </ul>
+
   <h3>From 5.x to 6.0</h3>
   <p>
     Call sites compile unchanged. What moves is output in a few places where 5.x lost data or produced lines that could
