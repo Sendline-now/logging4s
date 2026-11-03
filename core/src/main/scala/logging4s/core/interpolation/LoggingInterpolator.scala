@@ -6,6 +6,9 @@ import logging4s.core.{Level, Loggable, LoggableValue, Logging, ValueKey}
 
 private[core] object LoggingInterpolator:
 
+  private val ServiceSelectors = Set("get", "head", "last")
+  private val TupleAccessor    = "_[0-9]+".r
+
   def infoImpl[F[*]: Type](
       sc: Expr[StringContext],
       args: Expr[Seq[Any]],
@@ -94,13 +97,20 @@ private[core] object LoggingInterpolator:
   private def toLoggableValue(argExpr: Expr[Any])(using Quotes): Expr[LoggableValue] =
     import quotes.reflect.*
 
-    def nameOf(term: Term): Option[String] =
+    def pathOf(term: Term): Option[List[String]] =
       term match
-        case Inlined(_, _, inner) => nameOf(inner)
-        case Typed(inner, _)      => nameOf(inner)
-        case Ident(name)          => Some(name)
-        case Select(_, name)      => Some(name)
-        case _                    => None
+        case Inlined(_, _, inner)                                                              => pathOf(inner)
+        case Typed(inner, _)                                                                   => pathOf(inner)
+        case Ident(name)                                                                       => Some(List(name))
+        case This(_)                                                                           => Some(Nil)
+        case Select(_, name) if ServiceSelectors.contains(name) || TupleAccessor.matches(name) => None
+        case Select(qualifier, name)                                                           => pathOf(qualifier).map(_ :+ name)
+        case Apply(fun: Select, Nil) if fun.symbol.flags.is(Flags.JavaDefined)                 => pathOf(fun)
+        case Apply(fun, List(arg)) if fun.symbol.flags.is(Flags.Implicit)                      => pathOf(arg)
+        case _                                                                                 => None
+
+    def nameOf(term: Term): Option[String] =
+      pathOf(term).filter(_.nonEmpty).map(_.mkString("_"))
 
     val term = argExpr.asTerm
     val tpe  = term.tpe.widen

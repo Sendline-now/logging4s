@@ -82,6 +82,29 @@ class LoggingInterpolatorSpec extends AnyWordSpec, Matchers:
 
       log.values.map(_.key) shouldEqual Seq(ValueKey("user"), ValueKey("n"))
 
+    "join a selection path rooted in an identifier into the key" in:
+      val log                 = new Capturing
+      given Logging[Identity] = log
+
+      val user  = Point(1, 2)
+      val items = List(1, 2, 3)
+      val name  = "Jane"
+      info"selected ${user.x} ${items.size} ${name.length} ${name.size}"
+
+      log.values.map(_.key.value) shouldEqual Seq("user_x", "items_size", "name_length", "name_size")
+
+    "fall back to the Loggable key for a call, a service selector or a path not rooted in an identifier" in:
+      val log                 = new Capturing
+      given Logging[Identity] = log
+
+      val maybe          = Option(Point(1, 2))
+      val pair           = (Point(1, 2), 3)
+      val points         = List(Point(1, 2))
+      def compute(): Int = 7
+      info"fallback ${compute()} ${maybe.get} ${pair._1} ${points.head} ${points.last} ${Point(3, 4).x}"
+
+      log.values.map(_.key.value) shouldEqual Seq("int", "point", "point", "point", "point", "int")
+
     "use an explicit LoggableValue as-is, keeping its key" in:
       val log                 = new Capturing
       given Logging[Identity] = log
