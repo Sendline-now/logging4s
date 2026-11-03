@@ -66,11 +66,40 @@ class ContextualLoggingSpec extends AnyWordSpec, Matchers:
       local.reads shouldEqual 0
       base.recorded shouldBe empty
 
+    "hand the ambient context to the backend instead of deriving a logger per record" in:
+      val base  = CountingLogging()
+      val local = VarContext()
+      val log   = Logging.contextual(base.mapK([A] => (fa: Lazy[A]) => fa))(using local)
+
+      local.scoped("r-1".asLogValue("request_id"))(log.info("x"))()
+
+      base.withContextCalls shouldEqual 0
+      base.ambient.map(_.values.map(_.key.value)) shouldEqual Seq(Seq("request_id"))
+
 object ContextualLoggingSpec:
   type Lazy[A] = () => A
 
   given Delay[Lazy] = new:
     override def delay[A](a: => A): Lazy[A] = () => a
+
+  final class CountingLogging extends Logging[Lazy]:
+    var withContextCalls: Int           = 0
+    var ambient: Vector[LoggingContext] = Vector.empty
+
+    override def withContext(context: LoggingContext): Logging[Lazy] =
+      withContextCalls += 1
+      this
+
+    override def enabled(level: Level): Boolean = true
+    override def unit: Lazy[Unit]               = () => ()
+
+    override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): Lazy[Unit] =
+      unit
+
+    override def emitWith(context: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+        Position
+    ): Lazy[Unit] =
+      () => ambient = ambient :+ context
 
   final class VarContext extends LocalContext[Lazy]:
     private var current = LoggingContext.empty

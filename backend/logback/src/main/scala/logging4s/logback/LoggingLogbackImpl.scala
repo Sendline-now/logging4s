@@ -14,15 +14,28 @@ private[logback] class LoggingLogbackImpl[F[*]: Delay](
 
   private val ctxValues = LogRecord.context(Nil, context).values
 
+  private def contextOf(ambient: LoggingContext): Seq[LoggableValue] =
+    if ambient.values.isEmpty then ctxValues else LogRecord.context(ctxValues, ambient).values
+
   override def withContext(moreContext: LoggingContext): Logging[F] =
     LoggingLogbackImpl(logger, LogRecord.context(ctxValues, moreContext))
 
-  override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using position: Position): F[Unit] =
+  override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): F[Unit] =
+    emitIn(LoggingContext.empty, level, message, cause, values)
+
+  override def emitWith(context: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+      Position
+  ): F[Unit] =
+    emitIn(context, level, message, cause, values)
+
+  private def emitIn(ambient: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+      position: Position
+  ): F[Unit] =
     if !enabled(level) then unit
     else
       Delay[F].delay {
         if enabled(level) then
-          val record = LogRecord.prepare(ctxValues, values, position, LogRecord.ReservedKeys)
+          val record = LogRecord.prepare(contextOf(ambient), values, position, LogRecord.ReservedKeys)
           val text   = LogMessage.render(message, cause, record.values)
 
           if record.structured.isEmpty then write(level, text, cause)

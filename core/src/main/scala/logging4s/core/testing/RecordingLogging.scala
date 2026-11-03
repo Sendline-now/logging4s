@@ -33,14 +33,23 @@ final class RecordingLogging[F[*]: Delay] private (
 
   override def unit: F[Unit] = Delay[F].unit
 
-  override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+  override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): F[Unit] =
+    emitIn(LoggingContext.empty, level, message, cause, values)
+
+  override def emitWith(context: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+      Position
+  ): F[Unit] =
+    emitIn(context, level, message, cause, values)
+
+  private def emitIn(ambient: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
       position: Position
   ): F[Unit] =
     if !enabled(level) then unit
     else
       Delay[F].delay {
-        val record = LogRecord.prepare(context, values, position, LogRecord.ReservedKeys)
-        val event  = RecordedEvent(level, message, cause, LoggableValue.normalizeKeys(values), context, record.values, position)
+        val merged = if ambient.values.isEmpty then context else LogRecord.context(context, ambient).values
+        val record = LogRecord.prepare(merged, values, position, LogRecord.ReservedKeys)
+        val event  = RecordedEvent(level, message, cause, LoggableValue.normalizeKeys(values), merged, record.values, position)
         state.updateAndGet(_ :+ event): Unit
       }
 

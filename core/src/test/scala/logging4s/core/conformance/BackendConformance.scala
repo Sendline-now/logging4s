@@ -72,6 +72,17 @@ trait BackendConformance extends AnyWordSpec, Matchers:
       record.count("user_id") shouldEqual 1
       record("user_id") shouldEqual Some("2")
 
+    "place an ambient context between the logger's own context and the call site" in:
+      val own     = LoggingContext(1.asLogValue("x"), 1.asLogValue("y"), 1.asLogValue("user_id"))
+      val ambient = LoggingContext(2.asLogValue("y"), 2.asLogValue("z"), 2.asLogValue("userId"))
+
+      val record = capture(s"$backendName-conformance-ambient", own) { logging =>
+        logging.emitWith(ambient, Level.Info, "event", None, Seq(3.asLogValue("z")))
+      }
+
+      Seq("x", "y", "z", "user_id").map(record.apply) shouldEqual Seq(Some("1"), Some("2"), Some("3"), Some("2"))
+      Seq("x", "y", "z", "user_id").map(record.count) shouldEqual Seq(1, 1, 1, 1)
+
     "emit the call site as a source field, and never in the message text" in:
       val record = capture(s"$backendName-conformance-source")(_.info("event"))
 

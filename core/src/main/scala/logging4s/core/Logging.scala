@@ -11,6 +11,11 @@ trait Logging[F[*]]:
 
   def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): F[Unit]
 
+  def emitWith(context: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+      Position
+  ): F[Unit] =
+    if context.values.isEmpty then emit(level, message, cause, values) else withContext(context).emit(level, message, cause, values)
+
   def enabled(level: Level): Boolean
 
   def unit: F[Unit]
@@ -23,6 +28,11 @@ trait Logging[F[*]]:
 
       override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): G[Unit] =
         f(self.emit(level, message, cause, values))
+
+      override def emitWith(context: LoggingContext, level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using
+          Position
+      ): G[Unit] =
+        f(self.emitWith(context, level, message, cause, values))
 
   final inline def error(inline message: String)(using inline position: Position): F[Unit] =
     if enabled(Level.Error) then emit(Level.Error, LogMessage.static(message), None, Nil) else unit
@@ -120,12 +130,7 @@ object Logging:
       override def emit(level: Level, message: String, cause: Option[Throwable], values: Seq[LoggableValue])(using Position): F[Unit] =
         if !underlying.enabled(level)
         then underlying.unit
-        else
-          local.use { context =>
-            if context.values.isEmpty
-            then underlying.emit(level, message, cause, values)
-            else underlying.withContext(context).emit(level, message, cause, values)
-          }
+        else local.use(context => underlying.emitWith(context, level, message, cause, values))
 
   def create[F[*]: Delay, S](using factory: LoggingFactory, S: ClassTag[S]): F[Logging[F]] =
     factory.create(S.runtimeClass.getName.stripSuffix("$"), LoggingContext.empty)
