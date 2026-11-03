@@ -62,6 +62,26 @@ class ZioContextSpec extends AnyWordSpec, Matchers:
 
       base.recorded.map(_.keys) shouldEqual Vector(Seq("request_id", "child"), Seq("request_id"))
 
+    "let an inner scope override a key of the outer one and give it back on exit" in:
+      val base = RecordingLogging[Task]()
+      val log  = Logging.contextual(base)
+
+      val inner = ZioLoggingContext.scoped("r-2".asLogValue("request_id"))(log.info("inner"))
+
+      run(ZioLoggingContext.scoped("r-1".asLogValue("request_id"))(log.info("outer") *> inner *> log.info("outer again")))
+
+      base.recorded.map(_.plainOf("request_id")) shouldEqual Vector(Some("r-1"), Some("r-2"), Some("r-1"))
+
+    "restore the previous context when the scoped effect is interrupted, before outer finalizers run" in:
+      val base = RecordingLogging[Task]()
+      val log  = Logging.contextual(base)
+
+      val scoped = ZioLoggingContext.scoped("r-1".asLogValue("request_id"))(ZIO.interrupt)
+
+      run(scoped.onInterrupt(log.info("interrupted").orDie).fork.flatMap(_.await))
+
+      base.recorded.map(_.keys) shouldEqual Vector(Nil)
+
     "scope an effect with an environment and a typed error" in:
       val base = RecordingLogging[UIO]()
       val log  = Logging.contextual(base)

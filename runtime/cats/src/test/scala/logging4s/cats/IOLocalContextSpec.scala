@@ -1,5 +1,7 @@
 package logging4s.cats
 
+import scala.concurrent.ExecutionContext
+
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -61,6 +63,52 @@ class IOLocalContextSpec extends AnyWordSpec, Matchers:
       program.unsafeRunSync()
 
       base.recorded.map(_.keys) shouldEqual Vector(Nil)
+
+    "restore the previous context when the scoped effect is canceled, before outer finalizers run" in:
+      val base = RecordingLogging[IO]()
+
+      val program =
+        for
+          local <- IOLocalContext.make
+          log    = Logging.contextual(base)(using local)
+          _     <- local.scoped("r-1".asLogValue("request_id"))(IO.canceled).onCancel(log.info("canceled")).start.flatMap(_.join)
+        yield ()
+
+      program.unsafeRunSync()
+
+      base.recorded.map(_.keys) shouldEqual Vector(Nil)
+
+    "carry the context into every fiber of a parTraverse and across evalOn" in:
+      val base = RecordingLogging[IO]()
+
+      val program =
+        for
+          local  <- IOLocalContext.make
+          log     = Logging.contextual(base)(using local)
+          items   = List("a", "b", "c").parTraverse_(item => log.info("item", item.asLogValue("item")))
+          shifted = log.info("shifted").evalOn(ExecutionContext.global)
+          _      <- local.scoped("r-1".asLogValue("request_id"))(items *> shifted)
+        yield ()
+
+      program.unsafeRunSync()
+
+      base.recorded.map(_.keys) shouldEqual Vector.fill(3)(Seq("request_id", "item")) :+ Seq("request_id")
+
+    "let an inner scope override a key of the outer one and give it back on exit" in:
+      val base = RecordingLogging[IO]()
+
+      val program =
+        for
+          local <- IOLocalContext.make
+          log    = Logging.contextual(base)(using local)
+          inner  = local.scoped("r-2".asLogValue("request_id"))(log.info("inner"))
+          _     <- local.scoped("r-1".asLogValue("request_id"))(log.info("outer") *> inner *> log.info("outer again"))
+        yield ()
+
+      program.unsafeRunSync()
+
+      base.recorded.map(_.keys) shouldEqual Vector.fill(3)(Seq("request_id"))
+      base.recorded.map(_.plainOf("request_id")) shouldEqual Vector(Some("r-1"), Some("r-2"), Some("r-1"))
 
     "scope an effect of a tagless stack over IO, here a Kleisli" in:
       val base = RecordingLogging[App]()
