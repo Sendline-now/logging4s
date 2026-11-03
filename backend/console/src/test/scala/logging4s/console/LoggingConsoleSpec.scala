@@ -24,7 +24,7 @@ class LoggingConsoleSpec extends AnyWordSpec, Matchers:
   private def captureStreams(
       config: ConsoleConfig,
       encoding: LoggableEncodingConfig = LoggableEncodingConfig.Default,
-      name: String = "ConsoleSpec",
+      name: String,
   )(run: Logging[Try] => Unit): (String, String) =
     given ConsoleConfig          = config
     given LoggableEncodingConfig = encoding
