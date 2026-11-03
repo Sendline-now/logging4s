@@ -49,8 +49,8 @@ Pick a backend and an effect runtime (a JSON library is optional — `derives Lo
 
 ```scala
 libraryDependencies ++= Seq(
-  "org.logging4s" %% "logging4s-cats"    % "6.0.0",
-  "org.logging4s" %% "logging4s-logback" % "6.0.0"
+  "org.logging4s" %% "logging4s-cats"    % "6.1.0",
+  "org.logging4s" %% "logging4s-logback" % "6.1.0"
 )
 ```
 
@@ -548,7 +548,7 @@ a `List[String]` — and a search index that maps one field to both an object an
 Published for Scala 3 under `org.logging4s`:
 
 ```scala
-"org.logging4s" %% "logging4s-<module>" % "6.0.0"
+"org.logging4s" %% "logging4s-<module>" % "6.1.0"
 ```
 
 | | Module | Min. Scala | Notes |

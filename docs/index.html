@@ -140,8 +140,8 @@
   <h2 id="start">Quick start</h2>
   <p>Pick a backend and an effect runtime (a JSON library is optional — <code>derives Loggable</code> needs none):</p>
   <pre><code>libraryDependencies ++= Seq(
-  "org.logging4s" %% "logging4s-cats"    % "6.0.0",
-  "org.logging4s" %% "logging4s-logback" % "6.0.0"
+  "org.logging4s" %% "logging4s-cats"    % "6.1.0",
+  "org.logging4s" %% "logging4s-logback" % "6.1.0"
 )</code></pre>
   <pre><code>import cats.effect.{IO, IOApp}
 
@@ -466,7 +466,7 @@ log.recorded.head.jsonOf("user_name") shouldEqual Some("\"John\"")   // valueOf 
 
   <h2 id="modules">Modules</h2>
   <p>Published for Scala 3 under <code>org.logging4s</code>:</p>
-  <pre><code>"org.logging4s" %% "logging4s-&lt;module&gt;" % "6.0.0"</code></pre>
+  <pre><code>"org.logging4s" %% "logging4s-&lt;module&gt;" % "6.1.0"</code></pre>
   <table>
     <tr><th>Kind</th><th>Module</th><th>Min. Scala</th><th>Notes</th></tr>
     <tr><td>core</td><td><code>logging4s-core</code></td><td>3.9 LTS</td><td>type classes + <code>Logging</code>; no backend dependency</td></tr>
