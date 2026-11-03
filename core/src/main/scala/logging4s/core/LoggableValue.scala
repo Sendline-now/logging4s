@@ -24,7 +24,7 @@ object LoggableValue:
   private final class Deferred[A](val key: ValueKey, value: A, loggable: Loggable[A]) extends LoggableValue:
     override lazy val plain: PlainString = loggable.plain(value)
     override lazy val json: JsonString   = loggable.json(value)
-    override def absent: Boolean         = loggable.isAbsent(value)
+    override lazy val absent: Boolean    = loggable.isAbsent(value)
 
     override def withKey(updatedKey: ValueKey): LoggableValue = Deferred(updatedKey, value, loggable)
 

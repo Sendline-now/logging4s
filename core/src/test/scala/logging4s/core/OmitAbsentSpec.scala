@@ -34,6 +34,29 @@ class OmitAbsentSpec extends AnyWordSpec, Matchers:
 
       LogRecord.prepare(Nil, Seq(nested.asLogValue("n")), Position.unknown).values shouldBe empty
 
+    "treat a Unit value as absent, the same as a pre-rendered null" in:
+      given LoggableEncodingConfig = omitting
+      val values                   = Seq(().asLogValue("u"), LoggableValue(ValueKey("r"), PlainString(""), JsonString.Null), 1.asLogValue("n"))
+
+      LogRecord.prepare(Nil, values, Position.unknown).values.map(_.key.value) shouldEqual Seq("n")
+
+    "ask each value whether it is absent only once" in:
+      given LoggableEncodingConfig = omitting
+      var asked                    = 0
+
+      val counting: Loggable[Int] = new:
+        override val key: ValueKey              = ValueKey("n")
+        override def json(n: Int): JsonString   = JsonString(n.toString)
+        override def plain(n: Int): PlainString = PlainString(n.toString)
+        override def isAbsent(n: Int): Boolean  =
+          asked += 1
+          n == 0
+
+      val values = Seq(LoggableValue.deferred(ValueKey("a"), 0, counting), LoggableValue.deferred(ValueKey("b"), 1, counting))
+
+      LogRecord.prepare(Nil, values, Position.unknown).values.map(_.key.value) shouldEqual Seq("b")
+      asked shouldEqual 2
+
     "let a call-site None remove a context value with the same key, exactly as it would override it with null" in:
       given LoggableEncodingConfig = omitting
       val record                   = LogRecord.prepare(Seq(Some(1).asLogValue("n")), Seq(Option.empty[Int].asLogValue("n")), Position.unknown)

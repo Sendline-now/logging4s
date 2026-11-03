@@ -156,6 +156,7 @@ object Loggable extends LoggableMidPriority:
       override val key: ValueKey               = ValueKey("unit")
       override def plain(u: Unit): PlainString = PlainString("")
       override def json(u: Unit): JsonString   = JsonString.Null
+      override def isAbsent(u: Unit): Boolean  = true
 
   given LoggableOption: [T] => (L: Loggable[T]) => Loggable[Option[T]] =
     new:
