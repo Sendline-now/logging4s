@@ -103,3 +103,12 @@ class ConsoleLevelResolutionSpec extends AnyWordSpec, Matchers:
       val loaded = ConsoleConfig.load(raw)
 
       Level.values.foreach(level => loaded.thresholdFor("anything").allows(level) shouldEqual false)
+
+    "reject an invalid value with an error that names the key" in:
+      def loadWith(key: String): ConsoleConfig =
+        ConsoleConfig.load(ConfigFactory.parseString(s"""logging4s.console.$key = "bogus"""").withFallback(ConfigFactory.defaultReference()))
+
+      Seq("level", "format", "color", "stream").foreach { key =>
+        val error = intercept[IllegalArgumentException](loadWith(key))
+        error.getMessage shouldEqual s"Invalid logging4s.console.$key: 'bogus'"
+      }
