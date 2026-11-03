@@ -62,12 +62,13 @@ private[console] object Renderer:
     colorize(console, level, withTrace)
 
   private def colorize(console: ConsoleConfig, level: Level, text: String): String =
-    val enabled = console.color match
+    if !colored(console.color, interactive) then text else s"$Esc[${colorCode(level)}m$text$Esc[0m"
+
+  private[console] def colored(mode: ColorMode, interactive: => Boolean): Boolean =
+    mode match
       case ColorMode.On   => true
       case ColorMode.Off  => false
       case ColorMode.Auto => interactive
-
-    if !enabled then text else s"$Esc[${colorCode(level)}m$text$Esc[0m"
 
   private lazy val interactive: Boolean =
     val console = System.console()

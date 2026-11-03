@@ -3,9 +3,11 @@ package logging4s.console
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{ConfigFactory, ConfigResolveOptions}
 
 import logging4s.core.Level
+
+import scala.jdk.CollectionConverters.given
 
 class ConsoleLevelResolutionSpec extends AnyWordSpec, Matchers:
 
@@ -112,3 +114,23 @@ class ConsoleLevelResolutionSpec extends AnyWordSpec, Matchers:
         val error = intercept[IllegalArgumentException](loadWith(key))
         error.getMessage shouldEqual s"Invalid logging4s.console.$key: 'bogus'"
       }
+
+    "keep the reference defaults when no LOGGING4S_CONSOLE_* variable is set" in:
+      val reference = ConfigFactory.parseResources("reference.conf").resolve(ConfigResolveOptions.noSystem())
+
+      ConsoleConfig.load(reference) shouldEqual ConsoleConfig(Threshold.At(Level.Info), Format.Json, ColorMode.Auto, Stream.Stdout, -1)
+
+    "let LOGGING4S_CONSOLE_* variables override the reference defaults" in:
+      val variables = ConfigFactory.parseMap(
+        Map(
+          "LOGGING4S_CONSOLE_LEVEL"                 -> "debug",
+          "LOGGING4S_CONSOLE_FORMAT"                -> "plain",
+          "LOGGING4S_CONSOLE_COLOR"                 -> "on",
+          "LOGGING4S_CONSOLE_STREAM"                -> "stderr",
+          "LOGGING4S_CONSOLE_MAX_STACK_TRACE_LINES" -> "7",
+        ).asJava
+      )
+
+      val loaded = ConsoleConfig.load(variables.withFallback(ConfigFactory.parseResources("reference.conf")).resolve(ConfigResolveOptions.noSystem()))
+
+      loaded shouldEqual ConsoleConfig(Threshold.At(Level.Debug), Format.Plain, ColorMode.On, Stream.Stderr, 7)

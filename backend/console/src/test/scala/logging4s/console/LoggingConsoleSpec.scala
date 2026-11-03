@@ -19,19 +19,30 @@ class LoggingConsoleSpec extends AnyWordSpec, Matchers:
       encoding: LoggableEncodingConfig = LoggableEncodingConfig.Default,
       name: String = "ConsoleSpec",
   )(run: Logging[Try] => Unit): String =
+    captureStreams(config, encoding, name)(run)(0)
+
+  private def captureStreams(
+      config: ConsoleConfig,
+      encoding: LoggableEncodingConfig = LoggableEncodingConfig.Default,
+      name: String = "ConsoleSpec",
+  )(run: Logging[Try] => Unit): (String, String) =
     given ConsoleConfig          = config
     given LoggableEncodingConfig = encoding
 
     ConsoleCaptureLock.synchronized {
-      val out      = new ByteArrayOutputStream()
-      val original = System.out
+      val out              = new ByteArrayOutputStream()
+      val err              = new ByteArrayOutputStream()
+      val (stdout, stderr) = (System.out, System.err)
       System.setOut(new PrintStream(out, true, "UTF-8"))
+      System.setErr(new PrintStream(err, true, "UTF-8"))
       try
         val logging = Logging.createTry(name).get
         run(logging)
-      finally System.setOut(original)
+      finally
+        System.setOut(stdout)
+        System.setErr(stderr)
 
-      out.toString("UTF-8")
+      (out.toString("UTF-8"), err.toString("UTF-8"))
     }
 
   private val jsonAtInfo = ConsoleConfig(Threshold.At(Level.Info), Format.Json, ColorMode.Off, Stream.Stdout, -1)
@@ -125,3 +136,42 @@ class LoggingConsoleSpec extends AnyWordSpec, Matchers:
       lines(1) shouldEqual "java.lang.RuntimeException: boom"
       lines(2) should startWith("\tat ")
       lines(3) should fullyMatch regex """\.\.\. \d+ more"""
+
+    "write to stderr when configured, and not to stdout" in:
+      val (out, err) = captureStreams(jsonAtInfo.copy(stream = Stream.Stderr), name = "ConsoleSpec-stderr") { logging =>
+        logging.info("to stderr")
+      }
+
+      err should include(""""logger":"ConsoleSpec-stderr"""")
+      out should not include "ConsoleSpec-stderr"
+
+    "wrap each plain line in its level's ANSI color when color is on" in:
+      val config = ConsoleConfig(Threshold.At(Level.Trace), Format.Plain, ColorMode.On, Stream.Stdout, -1)
+
+      val out = capture(config, name = "ConsoleSpec-color") { logging =>
+        logging.error("e")
+        logging.warn("w")
+        logging.info("i")
+        logging.debug("d")
+        logging.trace("t")
+      }
+
+      val lines = out.linesIterator.filter(_.contains("ConsoleSpec-color")).toList
+
+      lines.map(_.take(5)) shouldEqual List("31", "33", "32", "36", "90").map(code => s"\u001b[${code}m")
+      all(lines) should endWith("\u001b[0m")
+
+    "leave a JSON line uncolored even when color is on" in:
+      val out = capture(jsonAtInfo.copy(color = ColorMode.On), name = "ConsoleSpec-json-color") { logging =>
+        logging.error("failed")
+      }
+
+      out should include(""""logger":"ConsoleSpec-json-color"""")
+      out should not include "\u001b"
+
+  "Console coloring" must:
+    "follow the terminal in auto mode, and ignore it when color is on or off" in:
+      Renderer.colored(ColorMode.Auto, interactive = false) shouldEqual false
+      Renderer.colored(ColorMode.Auto, interactive = true) shouldEqual true
+      Renderer.colored(ColorMode.On, interactive = false) shouldEqual true
+      Renderer.colored(ColorMode.Off, interactive = true) shouldEqual false
