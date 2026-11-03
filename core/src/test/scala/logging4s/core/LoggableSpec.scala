@@ -152,6 +152,26 @@ class LoggableSpec extends AnyWordSpec, Matchers:
       Loggable[Throwable].json(new RuntimeException("he said \"hi\"")) shouldEqual
         """{"class":"java.lang.RuntimeException","message":"he said \"hi\""}"""
 
+    "nest the cause chain in json, keeping the plain text to the outer exception" in:
+      val error = new RuntimeException("outer", new IllegalStateException("inner"))
+
+      Loggable[Throwable].json(error) shouldEqual
+        """{"class":"java.lang.RuntimeException","message":"outer","cause":{"class":"java.lang.IllegalStateException","message":"inner"}}"""
+      Loggable[Throwable].plain(error) shouldEqual "class=java.lang.RuntimeException, message=outer"
+
+    "stop at a cause already in the chain instead of looping" in:
+      val first  = new RuntimeException("first")
+      val second = new RuntimeException("second", first)
+      first.initCause(second): Unit
+
+      Loggable[Throwable].json(first) shouldEqual
+        """{"class":"java.lang.RuntimeException","message":"first","cause":{"class":"java.lang.RuntimeException","message":"second"}}"""
+
+    "nest at most five causes" in:
+      val error = (1 to 10).foldLeft(new RuntimeException("root"))((cause, n) => new RuntimeException(s"level $n", cause))
+
+      "\"cause\"".r.findAllIn(Loggable[Throwable].json(error).value).size shouldEqual 5
+
     "cover concrete exception subtypes, not just Throwable" in:
       val error = new IllegalStateException("boom")
 

@@ -145,11 +145,19 @@ object Loggable extends LoggableMidPriority:
     override def plain(e: Throwable): PlainString =
       PlainString(s"class=${e.getClass.getName}, message=${e.getMessage}")
 
-    override def json(e: Throwable): JsonString =
-      JsonString.obj(
-        "class"   -> JsonString.quoted(e.getClass.getName),
-        "message" -> Option(e.getMessage).fold(JsonString.Null)(JsonString.quoted),
-      )
+    override def json(e: Throwable): JsonString = throwableJson(e, e :: Nil)
+
+  private val CauseDepth = 5
+
+  private def throwableJson(e: Throwable, chain: List[Throwable]): JsonString =
+    val described = List(
+      "class"   -> JsonString.quoted(e.getClass.getName),
+      "message" -> Option(e.getMessage).fold(JsonString.Null)(JsonString.quoted),
+    )
+    val cause     = e.getCause
+
+    if cause == null || chain.sizeIs > CauseDepth || chain.exists(_ eq cause) then JsonString.obj(described*)
+    else JsonString.obj((described :+ ("cause" -> throwableJson(cause, cause :: chain)))*)
 
   given LoggableUnit: Loggable[Unit] =
     new:
