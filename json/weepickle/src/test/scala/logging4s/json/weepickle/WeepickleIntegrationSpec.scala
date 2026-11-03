@@ -22,3 +22,9 @@ class WeepickleIntegrationSpec extends AnyWordSpec, Matchers:
       val expected = """{"name":"John","age":18}"""
 
       Loggable.fromEncoders[User]("user").json(user) shouldEqual expected
+
+    "escape a string's quotes and line break, keeping the value on one line" in:
+      val json = Loggable.fromEncoders[User]("user").json(User("Jo \"Q\"\nDoe", 18)).value
+
+      json should include("""Jo \"Q\"\nDoe""")
+      json should not include "\n"

@@ -23,3 +23,9 @@ class SprayJsonIntegrationSpec extends AnyWordSpec, Matchers:
       val expected = """{"age":18,"name":"John"}"""
 
       Loggable.fromEncoders[User]("user").json(user) shouldEqual expected
+
+    "escape a string's quotes and line break, keeping the value on one line" in:
+      val json = Loggable.fromEncoders[User]("user").json(User("Jo \"Q\"\nDoe", 18)).value
+
+      json should include("""Jo \"Q\"\nDoe""")
+      json should not include "\n"
