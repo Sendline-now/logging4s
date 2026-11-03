@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers
 import zio.{NonEmptyChunk, Runtime, Task, UIO, Unsafe, ZEnvironment, ZIO}
 
 import logging4s.core.syntax.all.*
-import logging4s.core.{Delay, Loggable, Logging}
+import logging4s.core.{Delay, LocalContext, Loggable, Logging}
 import logging4s.core.testing.RecordingLogging
 
 import logging4s.logback.LogbackInstances.given
@@ -72,3 +72,19 @@ class ZioContextSpec extends AnyWordSpec, Matchers:
       run(ZioLoggingContext.scoped("r-1".asLogValue("request_id"))(effect).provideEnvironment(ZEnvironment(5)).mapError(new RuntimeException(_)))
 
       base.recorded.map(_.keys) shouldEqual Vector(Seq("request_id", "n"))
+
+    "give any ZIO[R, E, *] a LocalContext, so a logger mapped into it can be made contextual" in:
+      type App[A] = ZIO[Int, String, A]
+
+      val base = RecordingLogging[UIO]()
+      val log  = Logging.contextual(base.mapK[App]([A] => (fa: UIO[A]) => fa))
+
+      val effect: App[Unit] = ZIO.serviceWithZIO[Int](n => log.info("loaded", n.asLogValue("n")))
+
+      run(LocalContext[App].scoped("r-1".asLogValue("request_id"))(effect).provideEnvironment(ZEnvironment(5)).mapError(new RuntimeException(_)))
+
+      base.recorded.map(_.keys) shouldEqual Vector(Seq("request_id", "n"))
+
+    "keep the dedicated Task and UIO instances ahead of the generic one" in:
+      LocalContext[Task] should be theSameInstanceAs ZioInstances.ZioTaskLocalContext
+      LocalContext[UIO] should be theSameInstanceAs ZioInstances.ZioUIOLocalContext

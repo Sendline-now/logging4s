@@ -25,4 +25,8 @@ trait LocalContextInstance:
     override def use[A](f: LoggingContext => KIO[A]): KIO[A]            = KyoLoggingContext.use(f)
     override def scoped[A](context: LoggingContext)(fa: KIO[A]): KIO[A] = KyoLoggingContext.scoped(context)(fa)
 
+  given KyoLocalContext: [S] => LocalContext[[A] =>> A < S] = new:
+    override def use[A](f: LoggingContext => A < S): A < S            = KyoLoggingContext.use(f)
+    override def scoped[A](context: LoggingContext)(fa: A < S): A < S = KyoLoggingContext.scoped(context)(fa)
+
 object LocalContextInstance extends LocalContextInstance

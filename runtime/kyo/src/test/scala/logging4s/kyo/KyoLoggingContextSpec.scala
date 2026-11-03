@@ -3,9 +3,9 @@ package logging4s.kyo
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
-import kyo.{AllowUnsafe, Sync}
+import kyo.{<, Abort, AllowUnsafe, Result, Sync}
 
-import logging4s.core.Logging
+import logging4s.core.{LocalContext, Logging}
 import logging4s.core.syntax.all.*
 import logging4s.core.testing.RecordingLogging
 
@@ -42,3 +42,16 @@ class KyoLoggingContextSpec extends AnyWordSpec, Matchers:
 
     "expose the current context" in:
       run(KyoLoggingContext.scoped("r-1".asLogValue("request_id"))(KyoLoggingContext.get)).values.map(_.key.value) shouldEqual Seq("request_id")
+
+    "give any A < S a LocalContext, so a logger mapped into it can be made contextual" in:
+      type App[A] = A < (Sync & Abort[String])
+
+      val base = RecordingLogging[KIO]()
+      val log  = Logging.contextual(base.mapK[App]([A] => (fa: KIO[A]) => fa))
+
+      run(Abort.run[String](LocalContext[App].scoped("r-1".asLogValue("request_id"))(log.info("x")))) shouldEqual Result.succeed(())
+
+      base.recorded.map(_.keys) shouldEqual Vector(Seq("request_id"))
+
+    "keep the dedicated KIO instance ahead of the generic one" in:
+      LocalContext[KIO] should be theSameInstanceAs KyoInstances.KioLocalContext

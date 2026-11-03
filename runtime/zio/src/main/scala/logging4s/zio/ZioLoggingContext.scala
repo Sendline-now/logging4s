@@ -32,4 +32,8 @@ trait LocalContextInstance:
     override def use[A](f: LoggingContext => UIO[A]): UIO[A]            = ZioLoggingContext.use(f)
     override def scoped[A](context: LoggingContext)(fa: UIO[A]): UIO[A] = ZioLoggingContext.scoped(context)(fa)
 
+  given ZioLocalContext: [R, E] => LocalContext[[A] =>> ZIO[R, E, A]] = new:
+    override def use[A](f: LoggingContext => ZIO[R, E, A]): ZIO[R, E, A]            = ZioLoggingContext.use(f)
+    override def scoped[A](context: LoggingContext)(fa: ZIO[R, E, A]): ZIO[R, E, A] = ZioLoggingContext.scoped(context)(fa)
+
 object LocalContextInstance extends LocalContextInstance

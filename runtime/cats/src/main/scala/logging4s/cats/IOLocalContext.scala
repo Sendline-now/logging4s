@@ -1,6 +1,7 @@
 package logging4s.cats
 
-import cats.effect.{IO, IOLocal}
+import cats.syntax.all.*
+import cats.effect.{IO, IOLocal, LiftIO, MonadCancelThrow}
 
 import logging4s.core.{LocalContext, LoggingContext}
 
@@ -10,8 +11,15 @@ object IOLocalContext:
     IOLocal(LoggingContext.empty).map(from)
 
   def from(local: IOLocal[LoggingContext]): LocalContext[IO] =
-    new:
-      override def use[A](f: LoggingContext => IO[A]): IO[A] = local.get.flatMap(f)
+    lift[IO](local)
 
-      override def scoped[A](context: LoggingContext)(fa: IO[A]): IO[A] =
-        local.modify(current => (current + context, current)).bracket(_ => fa)(local.set)
+  def lifted[F[*]: {LiftIO, MonadCancelThrow}]: F[LocalContext[F]] =
+    LiftIO[F].liftIO(IOLocal(LoggingContext.empty)).map(lift[F])
+
+  def lift[F[*]: {LiftIO, MonadCancelThrow}](local: IOLocal[LoggingContext]): LocalContext[F] =
+    new:
+      override def use[A](f: LoggingContext => F[A]): F[A] = LiftIO[F].liftIO(local.get).flatMap(f)
+
+      override def scoped[A](context: LoggingContext)(fa: F[A]): F[A] =
+        val enter = LiftIO[F].liftIO(local.modify(current => (current + context, current)))
+        MonadCancelThrow[F].bracket(enter)(_ => fa)(previous => LiftIO[F].liftIO(local.set(previous)))
