@@ -1,5 +1,7 @@
 package logging4s.core
 
+import scala.compiletime.testing.typeCheckErrors
+
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -42,6 +44,15 @@ object Counted:
   )
 
 final case class Boxed(counted: Counted) derives Loggable
+
+final case class Box[A](value: A) derives Loggable
+final case class Tagged(id: Int)(note: String)
+final case class Secretive(id: Int, private val token: String) derives Loggable
+final case class Defaulted(id: Int, label: String = "none") derives Loggable
+
+enum Outcome[+A] derives Loggable:
+  case Done(value: A)
+  case Failed(reason: String)
 
 class LoggableDerivationSpec extends AnyWordSpec, Matchers:
 
@@ -129,3 +140,24 @@ class LoggableDerivationSpec extends AnyWordSpec, Matchers:
     "render nested products in plain form via plainValuesStyle" in:
       Loggable[Person].plain(Person("Jane", Address("NYC", "10001"))) shouldEqual
         "name -> (Jane), address -> (city -> (NYC), zip -> (10001))"
+
+  "Loggable.derived for less common shapes" must:
+    "derive a generic product from its type argument's instance" in:
+      Loggable[Box[Int]].key shouldEqual "box"
+      Loggable[Box[Int]].json(Box(1)) shouldEqual """{"value":1}"""
+      Loggable[Box[Point]].json(Box(Point(1, 2))) shouldEqual """{"value":{"x":1,"y":2}}"""
+
+    "derive a generic enum, each case from what it holds" in:
+      Loggable[Outcome[Int]].json(Outcome.Done(1)) shouldEqual """{"value":1}"""
+      Loggable[Outcome[Int]].json(Outcome.Failed("boom")) shouldEqual """{"reason":"boom"}"""
+
+    "refuse a case class with a second parameter list, which has no mirror to derive from" in:
+      val errors = typeCheckErrors("Loggable.derived[Tagged]")
+
+      errors.map(_.message).mkString should include("it takes more than one parameter list")
+
+    "render a private field like any other, since derivation sees every constructor field" in:
+      Loggable[Secretive].json(Secretive(1, "t0k3n")) shouldEqual """{"id":1,"token":"t0k3n"}"""
+
+    "render the value a field holds, whether or not it came from a default" in:
+      Loggable[Defaulted].json(Defaulted(1)) shouldEqual """{"id":1,"label":"none"}"""
