@@ -69,7 +69,16 @@ final class ProductLoggable[A](
     codecs: => List[Loggable[Any]],
     policies: Map[String, FieldPolicy],
     cfg: LoggableEncodingConfig,
+    singleton: Boolean,
 ) extends Loggable[A]:
+
+  def this(
+      typeName: String,
+      labels: List[String],
+      codecs: => List[Loggable[Any]],
+      policies: Map[String, FieldPolicy],
+      cfg: LoggableEncodingConfig,
+  ) = this(typeName, labels, codecs, policies, cfg, true)
 
   override val key: ValueKey = ValueKey(decapitalize(typeName))
 
@@ -127,8 +136,8 @@ final class ProductLoggable[A](
     !spec.policy.hidden && !(cfg.omitAbsentValues && spec.loggable.isAbsent(value))
 
   override def json(a: A): JsonString =
-    if specs.isEmpty
-    then JsonString.quoted(typeName)
+    if specs.isEmpty && singleton then JsonString.quoted(typeName)
+    else if specs.isEmpty then JsonString("{}")
     else
       val fields = a.asInstanceOf[Product].productIterator
       val sb     = new StringBuilder("{")

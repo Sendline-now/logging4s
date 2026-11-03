@@ -23,6 +23,7 @@ private[core] object macros:
       codecs = summonAll[Tuple.Map[V, Loggable]].toList.asInstanceOf[List[Loggable[Any]]],
       policies = Map.empty,
       cfg = cfg,
+      singleton = false,
     )
 
   inline def derived[A](using m: Mirror.Of[A]): Loggable[A] =
@@ -57,6 +58,13 @@ private[core] object macros:
             elemTypes[elems].forall(variant => hasLoggable(variant) || canDerive(variant))
           case _                                                                      => false
 
+  private inline def singleton[A]: Boolean = ${ singletonImpl[A] }
+
+  private def singletonImpl[A: Type](using Quotes): Expr[Boolean] =
+    import quotes.reflect.*
+    val tpe = TypeRepr.of[A].dealias
+    Expr(tpe.isSingleton || tpe.typeSymbol.flags.is(Flags.Module))
+
   private def hasLoggable(tpe: Type[?])(using Quotes): Boolean =
     tpe match
       case '[a] => Expr.summon[Loggable[a]].isDefined
@@ -78,6 +86,7 @@ private[core] object macros:
       summonAll[Tuple.Map[p.MirroredElemTypes, Loggable]].toList.asInstanceOf[List[Loggable[Any]]],
       policies,
       cfg,
+      singleton[A],
     )
 
   inline def deriveSum[A](using s: Mirror.SumOf[A], cfg: LoggableEncodingConfig): Loggable[A] =

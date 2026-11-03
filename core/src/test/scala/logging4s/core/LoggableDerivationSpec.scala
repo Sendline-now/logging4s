@@ -22,6 +22,12 @@ final case class Shirt(size: Int, color: Color) derives Loggable
 final case class Wrapper(owner: Account) derives Loggable
 final case class Line(start: Point, points: List[Point]) derives Loggable
 final case class Nickname(id: Int, nick: Option[String]) derives Loggable
+final case class Blank() derives Loggable
+case object Marker derives Loggable
+
+enum Signal derives Loggable:
+  case Idle
+  case Ping()
 
 final case class Counted(value: String)
 object Counted:
@@ -61,6 +67,14 @@ class LoggableDerivationSpec extends AnyWordSpec, Matchers:
 
       Loggable.derived[Account].json(Account(1, "4242")) shouldEqual """{"userId":1,"cardNumber":"4242"}"""
 
+    "render a product without fields as an empty object, keeping its name for plain text" in:
+      Loggable[Blank].json(Blank()) shouldEqual "{}"
+      Loggable[Blank].plain(Blank()) shouldEqual "Blank"
+
+    "render a case object as its name, since it is a singleton rather than an empty product" in:
+      Loggable[Marker.type].json(Marker) shouldEqual "\"Marker\""
+      Loggable[Marker.type].plain(Marker) shouldEqual "Marker"
+
   "Loggable.derived for a sum" must:
     "render a parameterless enum case as its label" in:
       Loggable[Color].key shouldEqual "color"
@@ -71,6 +85,10 @@ class LoggableDerivationSpec extends AnyWordSpec, Matchers:
       Loggable[Event].json(Event.Click(1, 2)) shouldEqual """{"x":1,"y":2}"""
       Loggable[Event].json(Event.Reset) shouldEqual "\"Reset\""
       Loggable[Event].plain(Event.Click(1, 2)) shouldEqual "x -> (1), y -> (2)"
+
+    "tell a singleton case from a case without fields" in:
+      Loggable[Signal].json(Signal.Idle) shouldEqual "\"Idle\""
+      Loggable[Signal].json(Signal.Ping()) shouldEqual "{}"
 
   "Loggable.derived recursively, reusing existing instances" must:
     "auto-derive a sum's case-class child that has no given of its own" in:
