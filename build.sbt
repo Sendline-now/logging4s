@@ -6,7 +6,7 @@ import scala.xml.{Elem, Node}
 lazy val currentOrganization  = "now.sendline"
 lazy val previousOrganization = "org.logging4s"
 
-lazy val binaryCompatibleWith = Set((previousOrganization, "6.0.0"), (previousOrganization, "6.1.0"))
+lazy val binaryCompatibleWith = Set((currentOrganization, "7.0.0"))
 
 lazy val compilerOnlyOptions = Seq("-source", "-Xcheck-macros", "-Wvalue-discard", "-Wnonunit-statement", "-Wconf")
 
