@@ -703,8 +703,10 @@ libraryDependencies += ("com.example" %% "internal-commons" % "1.2.3").excludeAl
 
 `org.logging4s` `7.0.0` exists as a relocation: each module is a `pom` whose `<relocation>` names `now.sendline`, with
 no jar of its own. Maven, and sbt through Coursier, resolve it to the `now.sendline` module of the same name and
-version, so a build — or Scala Steward — that only bumps the version lands on the new organization. Nothing is
-published under `org.logging4s` after it.
+version, so a build — or Scala Steward — that only bumps the version lands on the new organization. The `pom`'s
+description and the relocation's message both say where it went, so Maven prints the move as it follows it and Central
+shows it on the old coordinates' page; sbt follows it without saying so. Nothing is published under `org.logging4s`
+after it.
 
 ### From 6.0 to 6.1
 
