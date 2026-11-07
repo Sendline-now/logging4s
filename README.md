@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="logos/logging4s.png" alt="logging4s logo" width="240">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logos/logging4s-dark.svg">
+    <img src="logos/logging4s-light.svg" alt="logging4s" height="96">
+  </picture>
 </p>
 
 # logging4s
