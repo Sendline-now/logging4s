@@ -98,8 +98,17 @@ non-obvious — well-named identifiers should carry the *what*.
 
 ## Documentation
 
-`README.md` is the primary documentation. The site (`docs/index.html`) is a shorter rendering of it: change the README
-first, then carry the change over to the site, so the two never describe different behaviour.
+`README.md` is the documentation. The site at [oss.sendline.now/logging4s](https://oss.sendline.now/logging4s/) is
+built in its own repository from this README and the documents it links, shared with the other Sendline libraries, so
+a change to the docs here is what the site picks up.
+
+## Releasing
+
+Releases publish to Maven Central under `now.sendline`. `7.0.0` goes there twice, as two deployments. The first is the
+release itself (`publishSigned`, then `sonaRelease`). The second is a relocation under `org.logging4s`
+(`publishRelocation`, then `sonaRelease`): it sets `relocated` for every module, publishes a `pom` naming
+`now.sendline` and no jars, and then unsets it. Both stage into `target/sona-staging`, which keeps whatever earlier
+releases left there, so empty it before each deployment. No later release publishes under `org.logging4s`.
 
 ## Opening a pull request
 

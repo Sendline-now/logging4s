@@ -8,8 +8,8 @@ Structured logging for Scala 3. You describe how your types render with a `Logga
 `Logging[F[_]]` for your effect type, and log values directly. Each value is rendered to JSON and attached to the log
 event as structured data; the message string carries a human-readable rendering of the same values.
 
-[![CI](https://github.com/logging4s/logging4s/actions/workflows/ci.yml/badge.svg)](https://github.com/logging4s/logging4s/actions/workflows/ci.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/org.logging4s/logging4s-core_3?color=blue)](https://central.sonatype.com/search?q=logging4s)
+[![CI](https://github.com/sendline-now/logging4s/actions/workflows/ci.yml/badge.svg)](https://github.com/sendline-now/logging4s/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/now.sendline/logging4s-core_3?color=blue)](https://central.sonatype.com/search?q=logging4s)
 [![Scala 3.9](https://img.shields.io/badge/Scala-3.9-blue)](https://www.scala-lang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
@@ -49,8 +49,8 @@ Pick a backend and an effect runtime (a JSON library is optional — `derives Lo
 
 ```scala
 libraryDependencies ++= Seq(
-  "org.logging4s" %% "logging4s-cats"    % "6.1.0",
-  "org.logging4s" %% "logging4s-logback" % "6.1.0"
+  "now.sendline" %% "logging4s-cats"    % "7.0.0",
+  "now.sendline" %% "logging4s-logback" % "7.0.0"
 )
 ```
 
@@ -545,10 +545,10 @@ a `List[String]` — and a search index that maps one field to both an object an
 
 ## Modules
 
-Published for Scala 3 under `org.logging4s`:
+Published for Scala 3 under `now.sendline`:
 
 ```scala
-"org.logging4s" %% "logging4s-<module>" % "6.1.0"
+"now.sendline" %% "logging4s-<module>" % "7.0.0"
 ```
 
 | | Module | Min. Scala | Notes |
@@ -588,6 +588,13 @@ against the JDK 17 API rather than whichever JDK built it. `logging4s-kyo` is th
 Within a major version, binary compatibility is checked by
 [MiMa](https://github.com/lightbend/mima) on every build, and `versionScheme := "semver-spec"` describes what the
 artifacts promise.
+
+`7.0.0` moves logging4s to the `now.sendline` organization and changes nothing else: the code is `6.1.0`'s, the package
+is still `logging4s`, and MiMa checks every module against `org.logging4s` `6.0.0` and `6.1.0`. Swapping the
+organization in `build.sbt` is the whole upgrade — see [From 6.1 to 7.0](#from-61-to-70). `org.logging4s` `7.0.0` is
+published as a relocation, so a build that only bumps the version is moved to `now.sendline` by Maven and by sbt. The
+repository is [sendline-now/logging4s](https://github.com/sendline-now/logging4s), and the site is
+[oss.sendline.now/logging4s](https://oss.sendline.now/logging4s/).
 
 `logging4s-kyo` depends on a kyo release candidate (`1.0.0-RC7`). Until kyo reaches `1.0.0` final, that module sits
 outside the binary-compatibility promise the other artifacts make. Compiling it also needs **JDK 25** — kyo's `Frame`
@@ -671,6 +678,30 @@ level *on*, the guard costs nothing measurable.
 > the ordering are the signal; the enabled rows are ordinary measured work.
 
 ## Migration
+
+### From 6.1 to 7.0
+
+Only the organization changes. The code is `6.1.0`'s, the package is still `logging4s`, and MiMa checks every module of
+`7.0.0` against `org.logging4s` `6.0.0` and `6.1.0` and finds nothing.
+
+```diff
+- "org.logging4s" %% "logging4s-cats" % "6.1.0"
++ "now.sendline"  %% "logging4s-cats" % "7.0.0"
+```
+
+A build tool treats a new organization as a new library, so it will not evict one in favour of the other. If anything
+in your graph still brings `org.logging4s` `6.x` — an internal library not yet moved — both jars land on the classpath
+with the same classes, and which one loads depends on classpath order. Move that library too, or exclude the old
+organization where it comes in:
+
+```scala
+libraryDependencies += ("com.example" %% "internal-commons" % "1.2.3").excludeAll(ExclusionRule("org.logging4s"))
+```
+
+`org.logging4s` `7.0.0` exists as a relocation: each module is a `pom` whose `<relocation>` names `now.sendline`, with
+no jar of its own. Maven, and sbt through Coursier, resolve it to the `now.sendline` module of the same name and
+version, so a build — or Scala Steward — that only bumps the version lands on the new organization. Nothing is
+published under `org.logging4s` after it.
 
 ### From 6.0 to 6.1
 
@@ -1090,6 +1121,17 @@ Using logging4s? Open a PR to add your logo.
   This keeps the rest of the application running while a log write waits, at the cost of a thread hop per record —
   which for a fast sink can exceed the cost of the write itself, so it is a trade to make deliberately and not a
   default we impose.
+* **A new organization is a major version.** Moving from `org.logging4s` to `now.sendline` changes no class, and MiMa
+  agrees, so by the letter of semver it could have been `6.1.1`. It is `7.0.0` because a build tool sees a new
+  organization as a new library: it will not evict `org.logging4s` `6.1.0` in favour of `now.sendline` `6.1.1`, and
+  with both in a graph the same classes come from two jars, in classpath order, with no warning. That is a change the
+  user has to make by hand, in `build.sbt`, and a version bump that looks routine would hide it. The package stays
+  `logging4s` — renaming it would turn a one-line build change into an edit of every import. The old coordinates are
+  not left to rot: `org.logging4s` `7.0.0` is a relocation, which Maven and Coursier follow to the `now.sendline`
+  module of the same name and version — checked against sbt `2.0.12` by resolving
+  `org.logging4s:logging4s-logback_3:7.0.0` from a scratch repository and getting the `now.sendline` jars. A
+  relocation cannot reach back, though: a build pinned to `6.1.0` under `org.logging4s` stays there until someone
+  edits it.
 * **Known limitations.**
   * The `source` field is a file name and line, so two files of the same name in different packages read the same.
   * In the plain message text, a collection of products joins its elements with a comma, which most

@@ -1,7 +1,12 @@
 import Dependencies.Versions
 import com.typesafe.tools.mima.plugin.MimaKeys.mimaPreviousArtifacts
 
-lazy val binaryCompatibleWith = Set("6.0.0")
+import scala.xml.{Elem, Node}
+
+lazy val currentOrganization  = "now.sendline"
+lazy val previousOrganization = "org.logging4s"
+
+lazy val binaryCompatibleWith = Set((previousOrganization, "6.0.0"), (previousOrganization, "6.1.0"))
 
 lazy val compilerOnlyOptions = Seq("-source", "-Xcheck-macros", "-Wvalue-discard", "-Wnonunit-statement", "-Wconf")
 
@@ -10,12 +15,42 @@ lazy val noPublishSettings = Seq(
   mimaPreviousArtifacts := Set.empty,
 )
 
-lazy val commonSettings = Seq(
-  organization           := "org.logging4s",
-  organizationName       := "Logging4s",
-  homepage               := Some(uri("https://logging4s.org/")),
+lazy val relocated = settingKey[Boolean]("publish only a pom that moves the previous organization's coordinates to the current one")
+
+def relocation(pom: Node): Node =
+  pom match {
+    case project: Elem =>
+      val kept = project.child.filterNot(child => Set("dependencies", "packaging", "distributionManagement").contains(child.label))
+
+      project.copy(child =
+        kept ++
+          <packaging>pom</packaging>
+          <distributionManagement>
+            <relocation>
+              <groupId>{currentOrganization}</groupId>
+            </relocation>
+          </distributionManagement>
+      )
+    case other         => other
+  }
+
+addCommandAlias("publishRelocation", "set every relocated := true; publishSigned; set every relocated := false")
+
+lazy val relocationSettings = Seq(
+  relocated                              := false,
+  Compile / packageBin / publishArtifact := !relocated.value,
+  Compile / packageSrc / publishArtifact := !relocated.value,
+  Compile / packageDoc / publishArtifact := !relocated.value,
+  pomPostProcess                         := { val moving = relocated.value; pom => if (moving) relocation(pom) else pom },
+)
+
+lazy val commonSettings = relocationSettings ++ Seq(
+  organization           := (if (relocated.value) previousOrganization else currentOrganization),
+  organizationName       := "Sendline",
+  organizationHomepage   := Some(uri("https://oss.sendline.now/")),
+  homepage               := Some(uri("https://oss.sendline.now/logging4s/")),
   description            := "Structural logging for Scala 3 for any backend, runtime and json library",
-  version                := "6.1.0",
+  version                := "7.0.0",
   versionScheme          := Some("semver-spec"),
   scalaVersion           := Versions.scalaLTS,
   parallelExecution      := true,
@@ -26,8 +61,8 @@ lazy val commonSettings = Seq(
   publishTo              := localStaging.value,
   scmInfo                := Some(
     ScmInfo(
-      uri("https://github.com/logging4s/logging4s"),
-      "git@github.com:logging4s/logging4s.git",
+      uri("https://github.com/sendline-now/logging4s"),
+      "git@github.com:sendline-now/logging4s.git",
     )
   ),
   developers             := List(
@@ -39,7 +74,7 @@ lazy val commonSettings = Seq(
     )
   ),
   exportJars             := false,
-  mimaPreviousArtifacts  := binaryCompatibleWith.map(organization.value %% moduleName.value % _),
+  mimaPreviousArtifacts  := binaryCompatibleWith.map((organization, version) => organization %% moduleName.value % version),
   libraryDependencies ++= Dependencies.Testing.all,
   scalacOptions ++= Seq(
     "-encoding",

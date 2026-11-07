@@ -9,7 +9,7 @@ back-porting of fixes to older release lines at this stage.
 
 Please **do not** open a public GitHub issue for security vulnerabilities.
 
-Instead, use [GitHub Security Advisories](https://github.com/logging4s/logging4s/security/advisories/new)
+Instead, use [GitHub Security Advisories](https://github.com/sendline-now/logging4s/security/advisories/new)
 to report privately, or email **shadowsmind.dev@gmail.com** with details and, if possible, a minimal
 reproduction.
 
