@@ -9,7 +9,7 @@ object Dependencies {
     val logbackEncoder  = "9.0"
     val log4j           = "2.26.1"
     val slf4j           = "2.0.20"
-    val typesafeConfig  = "1.4.9"
+    val typesafeConfig  = "1.4.10"
     val jacksonDatabind = "2.22.4"
 
     val cats              = "2.13.0"
@@ -24,16 +24,16 @@ object Dependencies {
     val rapid = "2.9.9"
 
     val circe     = "0.14.17"
-    val jsoniter  = "2.42.0"
+    val jsoniter  = "2.42.3"
     val playJson  = "3.0.6"
     val sprayJson = "1.3.6"
     val json4s    = "4.0.7"
     val argonaut  = "6.3.10"
-    val borer     = "1.18.0"
+    val borer     = "1.19.0"
     val upickle   = "4.4.3"
     val weepickle = "1.9.1"
     val zioJson   = "1.1.1"
-    val fabric    = "1.30.3"
+    val fabric    = "1.30.4"
 
     val scalatest     = "3.2.20"
     val scalatestPlus = "3.2.20.0"
