@@ -56,7 +56,7 @@ jobs:
         run: |
           mains="CatsEffect3Example ConsoleExample ContextualLoggingExample LogWithContextExample NamedTupleExample WithoutEffectsExample ZioExample"
           commands=$(printf 'examples/runMain logging4s.examples.%s; ' $mains)
-          sbt -Dsbt.color=false "${commands%; }" | tee examples.log
+          sbt --server -Dsbt.color=false "${commands%; }" | tee examples.log
 
           expect() {
             awk -v main="logging4s.examples.$1" '/^\[info\] running \(fork\) / { on = ($NF == main) } on' examples.log | grep -qF -- "$2" \
