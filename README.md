@@ -42,7 +42,6 @@ flowchart LR
 * [Modules](#modules)
 * [Benchmarks](#benchmarks)
 * [Migration](#migration)
-* [Adopters](#adopters)
 * [Design notes](#design-notes)
 * [Contributing](#contributing)
 
@@ -1075,17 +1074,6 @@ values (`ValueKey(...)`, `JsonString.quoted(...)`, `PlainString(...)`). Also `re
 - **App-wide `LoggableEncodingConfig`** — key-name style, tuple / collection rendering.
 - **New backends** — standalone `logging4s-console`; opt-in `Logging4sEncoder` for logback (nested JSON, no Jackson);
   nested JSON for log4j2 via `JsonTemplateLayout`.
-
-## Adopters
-
-<a href="https://betby.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="logos/betby.svg"/>
-    <img src="logos/betby-dark.svg" alt="Betby" height="56"/>
-  </picture>
-</a>
-
-Using logging4s? Open a PR to add your logo.
 
 ## Design notes
 
